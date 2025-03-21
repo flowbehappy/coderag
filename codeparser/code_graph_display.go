@@ -25,7 +25,6 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 		{Name: string(NodeTypeFunc)},
 		{Name: string(NodeTypeComment)},
 		{Name: string(NodeTypePackage)},
-		{Name: string(NodeTypeOther)},
 	}
 
 	// Create a new graph chart with full-page dimensions
@@ -228,6 +227,11 @@ func PrintGraph(graph *Graph) {
 	println("Number of Nodes:", len(graph.Nodes))
 	println("Number of Edges:", len(graph.Edges))
 	println()
+
+	if true {
+		// Don't print the graph details
+		return
+	}
 
 	// Print node details
 	println("Nodes:")

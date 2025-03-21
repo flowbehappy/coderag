@@ -1,11 +1,13 @@
 package codeparser
 
 import (
+	"bufio"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -19,7 +21,6 @@ const (
 	NodeTypeFunc    NodeType = "Function"
 	NodeTypeComment NodeType = "Comment"
 	NodeTypePackage NodeType = "Package"
-	NodeTypeOther   NodeType = "Other"
 )
 
 // EdgeType represents the type of an edge in the graph.
@@ -51,23 +52,165 @@ type Edge struct {
 
 // Graph represents the entire graph.
 type Graph struct {
-	Nodes map[string]*Node // Map of node ID to Node
-	Edges []Edge           // List of edges
+	Nodes   map[string]*Node // Map of node ID to Node
+	Edges   []Edge           // List of edges
+	edgeMap map[string]bool  // Map for O(1) edge lookup
+}
+
+// AddEdge adds an edge to the graph if it doesn't already exist
+func (g *Graph) AddEdge(from, to string, edgeType EdgeType) {
+	// Create a unique edge signature
+	edgeKey := from + "|" + to + "|" + string(edgeType)
+
+	// Check if the edge already exists in O(1) time
+	if g.edgeMap == nil {
+		g.edgeMap = make(map[string]bool)
+	}
+
+	if g.edgeMap[edgeKey] {
+		return // Edge already exists, don't add a duplicate
+	}
+
+	// Add the new edge
+	g.Edges = append(g.Edges, Edge{
+		From: from,
+		To:   to,
+		Type: edgeType,
+	})
+
+	// Mark this edge as existing
+	g.edgeMap[edgeKey] = true
+}
+
+// ParseOptions represents options for parsing a repository
+type ParseOptions struct {
+	// OnlyRepoPackages when true, only includes packages that are part of the repository
+	// and excludes external dependencies and standard library
+	OnlyRepoPackages bool
+
+	// IncludeNodeTypes specifies which node types to include in the graph
+	// If empty, all node types are included
+	IncludeNodeTypes map[NodeType]bool
+}
+
+// DefaultParseOptions returns the default parsing options
+func DefaultParseOptions() ParseOptions {
+	return ParseOptions{
+		OnlyRepoPackages: false,
+		IncludeNodeTypes: map[NodeType]bool{
+			NodeTypeFile:    true,
+			NodeTypeStruct:  true,
+			NodeTypeFunc:    true,
+			NodeTypeComment: true,
+			NodeTypePackage: true,
+		},
+	}
+}
+
+// ShouldIncludeNodeType checks if a node type should be included based on the options
+func (opts ParseOptions) ShouldIncludeNodeType(nodeType NodeType) bool {
+	// If no node types are specified, include all types
+	if len(opts.IncludeNodeTypes) == 0 {
+		return true
+	}
+
+	// Otherwise, check if this type is in the map
+	return opts.IncludeNodeTypes[nodeType]
+}
+
+// Cache for module paths
+var modulePathCache = make(map[string]string)
+
+// getModulePath returns the Go module path for the specified repository path
+func getModulePath(repoPath string) string {
+	// Check if we've already determined the module path for this repo
+	if modulePath, ok := modulePathCache[repoPath]; ok {
+		return modulePath
+	}
+
+	// Look for go.mod file in the repository
+	goModPath := filepath.Join(repoPath, "go.mod")
+	file, err := os.Open(goModPath)
+	if err != nil {
+		// If go.mod doesn't exist, return empty string
+		modulePathCache[repoPath] = ""
+		return ""
+	}
+	defer file.Close()
+
+	// Regular expression to extract module path
+	moduleRegex := regexp.MustCompile(`^module\s+(.+)$`)
+
+	// Scan the file line by line
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := moduleRegex.FindStringSubmatch(line)
+		if len(matches) == 2 {
+			modulePath := strings.TrimSpace(matches[1])
+			modulePathCache[repoPath] = modulePath
+			return modulePath
+		}
+	}
+
+	// If module declaration not found
+	modulePathCache[repoPath] = ""
+	return ""
+}
+
+// isInRepo checks if a package path is within the repository
+func isInRepo(pkgPath string, repoPath string) bool {
+	// Get the module path for this repository
+	modulePath := getModulePath(repoPath)
+
+	// If we couldn't determine the module path, use a simpler heuristic
+	if modulePath == "" {
+		// Standard library packages don't contain a dot or slash
+		if !strings.Contains(pkgPath, ".") && !strings.Contains(pkgPath, "/") {
+			return false
+		}
+
+		// Packages directly under the repository path are considered part of the repo
+		// Strip any vendor directory from consideration
+		relPath := strings.TrimPrefix(pkgPath, "vendor/")
+
+		// This is a simple heuristic - packages with the same directory structure
+		// as the repository might be considered part of it
+		absRepoPath, _ := filepath.Abs(repoPath)
+		absPkgPath, _ := filepath.Abs(relPath)
+		return strings.HasPrefix(absPkgPath, absRepoPath)
+	}
+
+	// If we know the module path, check if the package path starts with it
+	return strings.HasPrefix(pkgPath, modulePath) || pkgPath == modulePath
 }
 
 // ParseRepo parses all Go files in a repository and builds a graph.
-func ParseRepo(repoPath string) (*Graph, error) {
-	graph := &Graph{
-		Nodes: make(map[string]*Node),
-		Edges: []Edge{},
+func ParseRepo(repoPath string, options ...ParseOptions) (*Graph, error) {
+	// Apply options, using defaults if none provided
+	opts := DefaultParseOptions()
+	if len(options) > 0 {
+		opts = options[0]
 	}
 
-	err := filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
+	graph := &Graph{
+		Nodes:   make(map[string]*Node),
+		Edges:   []Edge{},
+		edgeMap: make(map[string]bool),
+	}
+
+	// Get the absolute path of the repo for filtering purposes
+	absRepoPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if filepath.Ext(path) == ".go" {
-			if err := parseFile(path, graph); err != nil {
+			if err := parseFile(path, graph, absRepoPath, opts); err != nil {
 				return err
 			}
 		}
@@ -81,7 +224,7 @@ func ParseRepo(repoPath string) (*Graph, error) {
 }
 
 // parseFile parses a single Go file and updates the graph.
-func parseFile(filePath string, graph *Graph) error {
+func parseFile(filePath string, graph *Graph, repoPath string, opts ParseOptions) error {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, filePath, nil, parser.AllErrors|parser.ParseComments)
 	if err != nil {
@@ -90,34 +233,40 @@ func parseFile(filePath string, graph *Graph) error {
 
 	// Add the file node
 	fileNodeID := "file:" + filePath
-	graph.Nodes[fileNodeID] = &Node{
-		ID:   fileNodeID,
-		Type: NodeTypeFile,
-		Name: filepath.Base(filePath),
-		File: filePath,
+	if opts.ShouldIncludeNodeType(NodeTypeFile) {
+		graph.Nodes[fileNodeID] = &Node{
+			ID:   fileNodeID,
+			Type: NodeTypeFile,
+			Name: filepath.Base(filePath),
+			File: filePath,
+		}
 	}
+
+	// Current package
+	var currentPackageID string
 
 	// Add the package node and connect it to the file
 	if node.Name != nil {
 		packageName := node.Name.Name
 		packageNodeID := "package:" + packageName
+		currentPackageID = packageNodeID
 
 		// Check if the package node already exists
-		if _, exists := graph.Nodes[packageNodeID]; !exists {
-			graph.Nodes[packageNodeID] = &Node{
-				ID:   packageNodeID,
-				Type: NodeTypePackage,
-				Name: packageName,
-				File: "", // Package doesn't belong to a single file
+		if opts.ShouldIncludeNodeType(NodeTypePackage) {
+			if _, exists := graph.Nodes[packageNodeID]; !exists {
+				graph.Nodes[packageNodeID] = &Node{
+					ID:   packageNodeID,
+					Type: NodeTypePackage,
+					Name: packageName,
+					File: "", // Package doesn't belong to a single file
+				}
+			}
+
+			// Connect file to package
+			if opts.ShouldIncludeNodeType(NodeTypeFile) {
+				graph.AddEdge(fileNodeID, packageNodeID, EdgeTypeContain)
 			}
 		}
-
-		// Connect file to package
-		graph.Edges = append(graph.Edges, Edge{
-			From: fileNodeID,
-			To:   packageNodeID,
-			Type: EdgeTypeContain,
-		})
 	}
 
 	// Track the current function for detecting invocations
@@ -127,68 +276,92 @@ func parseFile(filePath string, graph *Graph) error {
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.GenDecl:
-			if x.Tok == token.IMPORT {
+			if x.Tok == token.IMPORT && currentPackageID != "" {
 				for _, spec := range x.Specs {
 					importSpec := spec.(*ast.ImportSpec)
 					importPath := strings.Trim(importSpec.Path.Value, `"`)
-					importNodeID := "import:" + importPath
-					if _, exists := graph.Nodes[importNodeID]; !exists {
-						graph.Nodes[importNodeID] = &Node{
-							ID:   importNodeID,
-							Type: NodeTypeOther,
-							Name: importPath,
+
+					// Skip external packages if OnlyRepoPackages is true
+					if opts.OnlyRepoPackages && !isInRepo(importPath, repoPath) {
+						continue
+					}
+
+					// Create import node directly as package nodes
+					importedPkgName := importPath
+					if lastSlash := strings.LastIndex(importPath, "/"); lastSlash >= 0 {
+						importedPkgName = importPath[lastSlash+1:]
+					}
+
+					// Handle aliased imports
+					if importSpec.Name != nil {
+						importedPkgName = importSpec.Name.Name
+						// Skip dot imports (.) and blank imports (_)
+						if importedPkgName == "." || importedPkgName == "_" {
+							continue
 						}
 					}
-					graph.Edges = append(graph.Edges, Edge{
-						From: fileNodeID,
-						To:   importNodeID,
-						Type: EdgeTypeImport,
-					})
+
+					importedPackageID := "package:" + importedPkgName
+
+					// Create the imported package node if it doesn't exist and if package nodes are included
+					if opts.ShouldIncludeNodeType(NodeTypePackage) {
+						if _, exists := graph.Nodes[importedPackageID]; !exists {
+							graph.Nodes[importedPackageID] = &Node{
+								ID:   importedPackageID,
+								Type: NodeTypePackage,
+								Name: importedPkgName,
+								File: "",
+							}
+						}
+
+						// Create edges if the relevant node types are included
+						if opts.ShouldIncludeNodeType(NodeTypeFile) {
+							graph.AddEdge(fileNodeID, importedPackageID, EdgeTypeImport)
+						}
+						graph.AddEdge(currentPackageID, importedPackageID, EdgeTypeImport)
+					}
 				}
 			}
 		case *ast.FuncDecl:
-			funcNodeID := "func:" + x.Name.Name
-			graph.Nodes[funcNodeID] = &Node{
-				ID:   funcNodeID,
-				Type: NodeTypeFunc,
-				Name: x.Name.Name,
-				File: filePath,
-				Pos:  x.Pos(),
-			}
-			graph.Edges = append(graph.Edges, Edge{
-				From: funcNodeID,
-				To:   fileNodeID,
-				Type: EdgeTypeEncapsulate,
-			})
+			if opts.ShouldIncludeNodeType(NodeTypeFunc) {
+				funcNodeID := "func:" + x.Name.Name
+				graph.Nodes[funcNodeID] = &Node{
+					ID:   funcNodeID,
+					Type: NodeTypeFunc,
+					Name: x.Name.Name,
+					File: filePath,
+					Pos:  x.Pos(),
+				}
 
-			// Set current function for tracking invocations
-			currentFunc = funcNodeID
+				if opts.ShouldIncludeNodeType(NodeTypeFile) {
+					graph.AddEdge(funcNodeID, fileNodeID, EdgeTypeEncapsulate)
+				}
 
-			if x.Recv != nil {
-				for _, field := range x.Recv.List {
-					if starExpr, ok := field.Type.(*ast.StarExpr); ok {
-						if ident, ok := starExpr.X.(*ast.Ident); ok {
-							structNodeID := "struct:" + ident.Name
-							if _, exists := graph.Nodes[structNodeID]; !exists {
-								graph.Nodes[structNodeID] = &Node{
-									ID:   structNodeID,
-									Type: NodeTypeStruct,
-									Name: ident.Name,
-									File: filePath,
+				// Set current function for tracking invocations
+				currentFunc = funcNodeID
+
+				if x.Recv != nil && opts.ShouldIncludeNodeType(NodeTypeStruct) {
+					for _, field := range x.Recv.List {
+						if starExpr, ok := field.Type.(*ast.StarExpr); ok {
+							if ident, ok := starExpr.X.(*ast.Ident); ok {
+								structNodeID := "struct:" + ident.Name
+								if _, exists := graph.Nodes[structNodeID]; !exists {
+									graph.Nodes[structNodeID] = &Node{
+										ID:   structNodeID,
+										Type: NodeTypeStruct,
+										Name: ident.Name,
+										File: filePath,
+									}
 								}
+								graph.AddEdge(funcNodeID, structNodeID, EdgeTypeOwnership)
 							}
-							graph.Edges = append(graph.Edges, Edge{
-								From: funcNodeID,
-								To:   structNodeID,
-								Type: EdgeTypeOwnership,
-							})
 						}
 					}
 				}
 			}
 		case *ast.CallExpr:
-			// Skip if we're not inside a function
-			if currentFunc == "" {
+			// Skip if we're not inside a function or if function nodes are not included
+			if currentFunc == "" || !opts.ShouldIncludeNodeType(NodeTypeFunc) {
 				break
 			}
 
@@ -218,14 +391,10 @@ func parseFile(filePath string, graph *Graph) error {
 				}
 
 				// Add the invocation edge
-				graph.Edges = append(graph.Edges, Edge{
-					From: currentFunc,
-					To:   calledFunc,
-					Type: EdgeTypeInvoke,
-				})
+				graph.AddEdge(currentFunc, calledFunc, EdgeTypeInvoke)
 			}
 		case *ast.TypeSpec:
-			if _, ok := x.Type.(*ast.StructType); ok {
+			if _, ok := x.Type.(*ast.StructType); ok && opts.ShouldIncludeNodeType(NodeTypeStruct) {
 				structNodeID := "struct:" + x.Name.Name
 				graph.Nodes[structNodeID] = &Node{
 					ID:   structNodeID,
@@ -234,26 +403,26 @@ func parseFile(filePath string, graph *Graph) error {
 					File: filePath,
 					Pos:  x.Pos(),
 				}
-				graph.Edges = append(graph.Edges, Edge{
-					From: structNodeID,
-					To:   fileNodeID,
-					Type: EdgeTypeEncapsulate,
-				})
+
+				if opts.ShouldIncludeNodeType(NodeTypeFile) {
+					graph.AddEdge(structNodeID, fileNodeID, EdgeTypeEncapsulate)
+				}
 			}
 		case *ast.CommentGroup:
-			commentNodeID := "comment:" + filePath + ":" + strconv.Itoa(int(x.Pos()))
-			graph.Nodes[commentNodeID] = &Node{
-				ID:   commentNodeID,
-				Type: NodeTypeComment,
-				Name: strings.Join(getCommentText(x), " "),
-				File: filePath,
-				Pos:  x.Pos(),
+			if opts.ShouldIncludeNodeType(NodeTypeComment) {
+				commentNodeID := "comment:" + filePath + ":" + strconv.Itoa(int(x.Pos()))
+				graph.Nodes[commentNodeID] = &Node{
+					ID:   commentNodeID,
+					Type: NodeTypeComment,
+					Name: strings.Join(getCommentText(x), " "),
+					File: filePath,
+					Pos:  x.Pos(),
+				}
+
+				if opts.ShouldIncludeNodeType(NodeTypeFile) {
+					graph.AddEdge(commentNodeID, fileNodeID, EdgeTypeEncapsulate)
+				}
 			}
-			graph.Edges = append(graph.Edges, Edge{
-				From: commentNodeID,
-				To:   fileNodeID,
-				Type: EdgeTypeEncapsulate,
-			})
 		}
 		return true
 	})
