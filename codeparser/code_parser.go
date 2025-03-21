@@ -18,6 +18,7 @@ const (
 	NodeTypeStruct  NodeType = "Struct"
 	NodeTypeFunc    NodeType = "Function"
 	NodeTypeComment NodeType = "Comment"
+	NodeTypePackage NodeType = "Package"
 	NodeTypeOther   NodeType = "Other"
 )
 
@@ -94,6 +95,29 @@ func parseFile(filePath string, graph *Graph) error {
 		Type: NodeTypeFile,
 		Name: filepath.Base(filePath),
 		File: filePath,
+	}
+
+	// Add the package node and connect it to the file
+	if node.Name != nil {
+		packageName := node.Name.Name
+		packageNodeID := "package:" + packageName
+
+		// Check if the package node already exists
+		if _, exists := graph.Nodes[packageNodeID]; !exists {
+			graph.Nodes[packageNodeID] = &Node{
+				ID:   packageNodeID,
+				Type: NodeTypePackage,
+				Name: packageName,
+				File: "", // Package doesn't belong to a single file
+			}
+		}
+
+		// Connect file to package
+		graph.Edges = append(graph.Edges, Edge{
+			From: fileNodeID,
+			To:   packageNodeID,
+			Type: EdgeTypeContain,
+		})
 	}
 
 	// Track the current function for detecting invocations

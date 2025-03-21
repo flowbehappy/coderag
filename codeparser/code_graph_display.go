@@ -24,6 +24,7 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 		{Name: string(NodeTypeStruct)},
 		{Name: string(NodeTypeFunc)},
 		{Name: string(NodeTypeComment)},
+		{Name: string(NodeTypePackage)},
 		{Name: string(NodeTypeOther)},
 	}
 
@@ -54,13 +55,6 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 				},
 			},
 		}),
-		// Add legend for edge types
-		// charts.WithLegendOpts(opts.Legend{
-		// 	Show:   opts.Bool(true),
-		// 	Orient: "vertical",
-		// 	Left:   "left",
-		// 	Data:   edgeCategoryNames(edgeCategories),
-		// }),
 	)
 
 	// Convert nodes to a map for quick lookup
@@ -169,6 +163,8 @@ func nodeSize(nodeType NodeType) float32 {
 		return 20
 	case NodeTypeComment:
 		return 15
+	case NodeTypePackage:
+		return 35 // Larger size for packages as they're higher level
 	default:
 		return 18
 	}
@@ -184,6 +180,8 @@ func nodeColor(nodeType NodeType) string {
 		return "#2ca02c" // green
 	case NodeTypeComment:
 		return "#d62728" // red
+	case NodeTypePackage:
+		return "#17becf" // cyan
 	default:
 		return "#9467bd" // purple
 	}
@@ -254,14 +252,26 @@ func filterGraph(graph *Graph, maxNodes int) *Graph {
 		Edges: []Edge{},
 	}
 
-	// First, collect file nodes as they're the most important
-	fileNodes := []*Node{}
+	// First, collect package nodes as they're highest level
+	packageNodes := []*Node{}
 	for id, node := range graph.Nodes {
-		if node.Type == NodeTypeFile {
-			fileNodes = append(fileNodes, node)
+		if node.Type == NodeTypePackage {
+			packageNodes = append(packageNodes, node)
 			filtered.Nodes[id] = node
 			if len(filtered.Nodes) >= maxNodes {
 				break
+			}
+		}
+	}
+
+	// Next, collect file nodes
+	if len(filtered.Nodes) < maxNodes {
+		for id, node := range graph.Nodes {
+			if node.Type == NodeTypeFile {
+				filtered.Nodes[id] = node
+				if len(filtered.Nodes) >= maxNodes {
+					break
+				}
 			}
 		}
 	}
