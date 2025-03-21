@@ -15,10 +15,6 @@ func main() {
 	println("Original graph statistics:")
 	PrintGraph(graph)
 
-	// Uncomment to filter the graph to a specific number of nodes
-	// filteredGraph := filterGraph(graph, 10)
-	// PrintGraph(filteredGraph)
-
 	// Print the filtered graph stats
 	println("\nFiltered graph statistics:")
 	PrintGraph(graph)

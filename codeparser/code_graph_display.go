@@ -27,18 +27,6 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 		{Name: string(NodeTypeOther)},
 	}
 
-	// Define edge categories explicitly
-	edgeCategories := []*opts.GraphCategory{
-		{Name: string(EdgeTypeInvoke)},
-		{Name: string(EdgeTypeContain)},
-		{Name: string(EdgeTypeImport)},
-		{Name: string(EdgeTypeOwnership)},
-		{Name: string(EdgeTypeEncapsulate)},
-	}
-
-	// Combine node and edge categories
-	allCategories := append(categories, edgeCategories...)
-
 	// Create a new graph chart with full-page dimensions
 	graphChart := charts.NewGraph()
 	graphChart.SetGlobalOptions(
@@ -114,7 +102,6 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 		validEdges = append(validEdges, opts.GraphLink{
 			Source: edge.From,
 			Target: edge.To,
-			// Category: string(edge.Type), // Use edge type as category
 			Label: &opts.EdgeLabel{
 				Show:      opts.Bool(true),
 				Formatter: string(edge.Type),
@@ -140,7 +127,7 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 						EdgeLength: 300,   // Increased for more spacing between nodes
 					},
 					Roam:       opts.Bool(true), // Allow zooming and panning
-					Categories: allCategories,   // Using combined categories
+					Categories: categories,
 				}),
 			charts.WithLabelOpts(opts.Label{
 				Show:     opts.Bool(true),
