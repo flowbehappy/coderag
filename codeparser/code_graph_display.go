@@ -8,10 +8,19 @@ import (
 	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
+// GraphLayout represents the layout type for graph visualization
+type GraphLayout string
+
+const (
+	GraphLayoutForce    GraphLayout = "force"
+	GraphLayoutCircular GraphLayout = "circular"
+)
+
 // DrawGraphInHTML generates an HTML visualization of the graph
-func DrawGraphInHTML(graph *Graph, outputPath string) error {
+func DrawGraphInHTML(graph *Graph, outputPath string, layout GraphLayout) error {
 	// Print debug information first
 	println("Preparing to generate HTML with", len(graph.Nodes), "nodes and", len(graph.Edges), "edges")
+	println("Using layout:", string(layout))
 
 	// Create a new page
 	page := components.NewPage()
@@ -108,20 +117,28 @@ func DrawGraphInHTML(graph *Graph, outputPath string) error {
 	}
 	println("Valid edges:", len(validEdges), "out of", len(graph.Edges))
 
+	// Prepare graph chart options based on layout type
+	graphOptions := opts.GraphChart{
+		Layout:     string(layout),
+		Categories: categories,
+		Roam:       opts.Bool(true), // Allow zooming and panning
+	}
+
+	// Add layout-specific options
+	if layout == GraphLayoutForce {
+		graphOptions.Force = &opts.GraphForce{
+			Repulsion:  20000, // Increased to spread nodes further
+			Gravity:    0.02,  // Decreased to reduce clustering
+			EdgeLength: 300,   // Increased for more spacing between nodes
+		}
+	} else if layout == GraphLayoutCircular {
+		graphOptions.Force = &opts.GraphForce{Repulsion: 8000}
+	}
+
 	// Add nodes and edges to the graph chart with improved visualization settings
 	graphChart.AddSeries("graph", nodes, validEdges).
 		SetSeriesOptions(
-			charts.WithGraphChartOpts(
-				opts.GraphChart{
-					Layout: "force",
-					Force: &opts.GraphForce{
-						Repulsion:  20000, // Increased to spread nodes further
-						Gravity:    0.02,  // Decreased to reduce clustering
-						EdgeLength: 300,   // Increased for more spacing between nodes
-					},
-					Roam:       opts.Bool(true), // Allow zooming and panning
-					Categories: categories,
-				}),
+			charts.WithGraphChartOpts(graphOptions),
 			charts.WithLabelOpts(opts.Label{
 				Show:     opts.Bool(true),
 				Position: "right",

@@ -13,6 +13,7 @@ func main() {
 	repoPath := flag.String("repo", "./", "Path to the repository to analyze")
 	onlyRepo := flag.Bool("only-repo", false, "Only include packages from this repository")
 	outputPath := flag.String("output", "graph.html", "Output path for the graph HTML file")
+	layoutType := flag.String("layout", "force", "Graph layout type: 'force' (default) or 'circular'")
 
 	// Define a custom flag for node types
 	var nodeTypes nodeTypeFlag
@@ -64,8 +65,16 @@ func main() {
 	println("Graph statistics:")
 	PrintGraph(graph)
 
+	// Determine layout type
+	layout := GraphLayoutForce
+	if *layoutType == "circular" {
+		layout = GraphLayoutCircular
+	} else if *layoutType != "force" {
+		fmt.Printf("Warning: Unknown layout type '%s', using 'force' layout\n", *layoutType)
+	}
+
 	// Generate the graph as an HTML file
-	if err := DrawGraphInHTML(graph, *outputPath); err != nil {
+	if err := DrawGraphInHTML(graph, *outputPath, layout); err != nil {
 		panic(err)
 	}
 

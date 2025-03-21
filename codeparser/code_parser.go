@@ -185,6 +185,37 @@ func isInRepo(pkgPath string, repoPath string) bool {
 	return strings.HasPrefix(pkgPath, modulePath) || pkgPath == modulePath
 }
 
+// getPackageFullPath returns the full path of a package based on its location in the repo
+func getPackageFullPath(filePath, repoPath string, packageName string) string {
+	// Get the module path
+	modulePath := getModulePath(repoPath)
+	if modulePath == "" {
+		// If no module path found, just use the package name
+		return packageName
+	}
+
+	// Convert absolute file path to path relative to repo root
+	absFilePath, _ := filepath.Abs(filePath)
+	absRepoPath, _ := filepath.Abs(repoPath)
+
+	// Get the relative path within the repo
+	relPath, err := filepath.Rel(absRepoPath, filepath.Dir(absFilePath))
+	if err != nil {
+		return packageName // Fallback to just the package name
+	}
+
+	// Handle special case for root package
+	if relPath == "." {
+		return modulePath
+	}
+
+	// Replace Windows backslashes with forward slashes for Go package paths
+	relPath = strings.ReplaceAll(relPath, "\\", "/")
+
+	// Construct the full package path
+	return modulePath + "/" + relPath
+}
+
 // ParseRepo parses all Go files in a repository and builds a graph.
 func ParseRepo(repoPath string, options ...ParseOptions) (*Graph, error) {
 	// Apply options, using defaults if none provided
@@ -248,7 +279,10 @@ func parseFile(filePath string, graph *Graph, repoPath string, opts ParseOptions
 	// Add the package node and connect it to the file
 	if node.Name != nil {
 		packageName := node.Name.Name
-		packageNodeID := "package:" + packageName
+
+		// Get the full package path
+		fullPackagePath := getPackageFullPath(filePath, repoPath, packageName)
+		packageNodeID := "package:" + fullPackagePath
 		currentPackageID = packageNodeID
 
 		// Check if the package node already exists
@@ -257,8 +291,8 @@ func parseFile(filePath string, graph *Graph, repoPath string, opts ParseOptions
 				graph.Nodes[packageNodeID] = &Node{
 					ID:   packageNodeID,
 					Type: NodeTypePackage,
-					Name: packageName,
-					File: "", // Package doesn't belong to a single file
+					Name: fullPackagePath, // Use full path as name
+					File: "",              // Package doesn't belong to a single file
 				}
 			}
 
@@ -286,17 +320,14 @@ func parseFile(filePath string, graph *Graph, repoPath string, opts ParseOptions
 						continue
 					}
 
-					// Create import node directly as package nodes
+					// Use the full import path instead of just the last component
 					importedPkgName := importPath
-					if lastSlash := strings.LastIndex(importPath, "/"); lastSlash >= 0 {
-						importedPkgName = importPath[lastSlash+1:]
-					}
 
 					// Handle aliased imports
 					if importSpec.Name != nil {
-						importedPkgName = importSpec.Name.Name
+						// If an import has an alias, we still use the full path as its identifier
 						// Skip dot imports (.) and blank imports (_)
-						if importedPkgName == "." || importedPkgName == "_" {
+						if importSpec.Name.Name == "." || importSpec.Name.Name == "_" {
 							continue
 						}
 					}
@@ -309,7 +340,7 @@ func parseFile(filePath string, graph *Graph, repoPath string, opts ParseOptions
 							graph.Nodes[importedPackageID] = &Node{
 								ID:   importedPackageID,
 								Type: NodeTypePackage,
-								Name: importedPkgName,
+								Name: importedPkgName, // Use full path
 								File: "",
 							}
 						}
