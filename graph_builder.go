@@ -209,12 +209,52 @@ func generateGraphHTML(graph *Graph, outputPath string) error {
 	// Print debug information first
 	println("Preparing to generate HTML with", len(graph.Nodes), "nodes and", len(graph.Edges), "edges")
 
+	// Create a new page
 	page := components.NewPage()
+	page.PageTitle = "Go Code Structure Graph"
+	page.AssetsHost = "" // Use local assets
 
-	// Create a new graph chart
+	// Define categories explicitly
+	categories := []*opts.GraphCategory{
+		{Name: string(NodeTypeFile)},
+		{Name: string(NodeTypeStruct)},
+		{Name: string(NodeTypeFunc)},
+		{Name: string(NodeTypeComment)},
+		{Name: string(NodeTypeOther)},
+	}
+
+	// Create a new graph chart with full-page dimensions
 	graphChart := charts.NewGraph()
 	graphChart.SetGlobalOptions(
-		charts.WithTitleOpts(opts.Title{Title: "Go Code Structure Graph"}),
+		charts.WithInitializationOpts(opts.Initialization{
+			Width:  "100%",
+			Height: "90vh", // 100% of viewport height
+			// PageTitle: "Go Code Structure Graph",
+			// BackgroundColor: &opts.BackgroundColor{
+			// 	Color: "rgba(255, 255, 255, 1)",
+			// },
+			// Set renderer to canvas for better performance with large graphs
+			Renderer: "canvas",
+		}),
+		// Add toolbox for navigation options
+		charts.WithToolboxOpts(opts.Toolbox{
+			Show:  opts.Bool(true),
+			Right: "20px",
+			Feature: &opts.ToolBoxFeature{
+				SaveAsImage: &opts.ToolBoxFeatureSaveAsImage{
+					Show:  opts.Bool(true),
+					Title: "Save as Image",
+				},
+				Restore: &opts.ToolBoxFeatureRestore{
+					Show:  opts.Bool(true),
+					Title: "Reset",
+				},
+				DataView: &opts.ToolBoxFeatureDataView{
+					Show:  opts.Bool(true),
+					Title: "Data View",
+				},
+			},
+		}),
 	)
 
 	// Convert nodes to a map for quick lookup
@@ -232,12 +272,10 @@ func generateGraphHTML(graph *Graph, outputPath string) error {
 			displayName = displayName[:30] + "..."
 		}
 
-		category := string(node.Type)
 		nodes = append(nodes, opts.GraphNode{
 			Name: id,
-			// Remove the Value field or use a numeric value if required
-			Category: category,
-			// Add visual attributes based on node type
+			// Value:      displayName,
+			Category:   string(node.Type), // Use the defined categories
 			SymbolSize: nodeSize(node.Type),
 			ItemStyle: &opts.ItemStyle{
 				Color: nodeColor(node.Type),
@@ -279,14 +317,13 @@ func generateGraphHTML(graph *Graph, outputPath string) error {
 				opts.GraphChart{
 					Layout: "force",
 					Force: &opts.GraphForce{
-						Repulsion:  1000, // Stronger repulsion to spread nodes
-						Gravity:    0.1,  // Some gravity to keep nodes together
-						EdgeLength: 100,  // Longer edges for better readability
-						// Remove Friction field as it doesn't exist
+						Repulsion:  20000, // Increased from 8000 to spread nodes further
+						Gravity:    0.02,  // Decreased from 0.1 to reduce clustering
+						EdgeLength: 300,   // Increased from 100 for more spacing between nodes
 					},
-					Roam: opts.Bool(true), // Allow zooming and panning
+					Roam:       opts.Bool(true), // Allow zooming and panning
+					Categories: categories,
 				}),
-
 			charts.WithLabelOpts(opts.Label{
 				Show:     opts.Bool(true),
 				Position: "right",
