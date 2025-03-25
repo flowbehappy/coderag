@@ -74,12 +74,6 @@ func DrawGraphInHTML(graph *Graph, outputPath string, layout GraphLayout) error 
 	// Important: create nodes with unique names
 	nodes := make([]opts.GraphNode, 0, len(graph.Nodes))
 	for id, node := range graph.Nodes {
-		// Use shorter names for readability
-		displayName := node.Name
-		if len(displayName) > 30 {
-			displayName = displayName[:30] + "..."
-		}
-
 		nodes = append(nodes, opts.GraphNode{
 			Name:       id,
 			Category:   string(node.Type), // Use the defined categories
