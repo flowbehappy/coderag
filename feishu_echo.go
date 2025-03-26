@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -208,7 +209,7 @@ var card_content = `
             "print_frequency_ms": {
                 "default": 70
             },
-            "print_strategy": "fast"
+            "print_strategy": "delay"
         },
         "style": {
             "text_size": {
@@ -357,6 +358,7 @@ func sendCardToUser(client *lark.Client, cardId string, messageId string, isThre
 }
 
 func updateCard(client *lark.Client, cardId string) error {
+
 	updateContent := `飞书emoji :OK::THUMBSUP:
 *斜体* **粗体** ~~删除线~~ 
 <font color='red'>这是红色文本</font>
@@ -466,6 +468,7 @@ func getAllMessagesInThread(client *lark.Client, threadId string) error {
 	hms, _ := json.Marshal(hisContents)
 	fmt.Println("History messages:", string(hms))
 	fmt.Println("Text and code:", getTextAndCode(hisContents))
+	return nil
 }
 
 func main() {
@@ -490,6 +493,21 @@ func main() {
 		 */
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			fmt.Printf("[OnP2MessageReceiveV1 access], data: %s\n", larkcore.Prettify(event))
+			if event.Event != nil && event.Event.Message != nil && event.Event.Message.Mentions != nil {
+				ms := event.Event.Message.Mentions
+				atMe := false
+				for _, mention := range ms {
+					if *mention.Name == "deephack" {
+						atMe = true
+						break
+					}
+				}
+				if !atMe {
+					return nil
+				}
+			} else {
+				return nil
+			}
 
 			threadId := event.Event.Message.ThreadId
 			if threadId != nil {
@@ -509,7 +527,10 @@ func main() {
 				}
 
 				// Update card content interactively
-				go updateCard(client, cardId)
+				go func() {
+					time.Sleep(1 * time.Second)
+					updateCard(client, cardId)
+				}()
 			}
 
 			return nil
