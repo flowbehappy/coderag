@@ -10,6 +10,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	larkcardkit "github.com/larksuite/oapi-sdk-go/v3/service/cardkit/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
@@ -194,14 +195,282 @@ func getTextAndCode(contents []MessagePostContent) string {
 	return result.String()
 }
 
+var card_content = `
+{
+    "schema": "2.0",
+    "config": {
+        "update_multi": true,
+        "streaming_mode": true,
+        "streaming_config": {
+            "print_step": {
+                "default": 1
+            },
+            "print_frequency_ms": {
+                "default": 70
+            },
+            "print_strategy": "fast"
+        },
+        "style": {
+            "text_size": {
+                "normal_v2": {
+                    "default": "normal",
+                    "pc": "normal",
+                    "mobile": "heading"
+                }
+            }
+        }
+    },
+    "body": {
+        "direction": "vertical",
+        "padding": "12px 12px 12px 12px",
+        "elements": [
+            {
+                "tag": "markdown",
+                "content": "AI generated content",
+                "text_align": "left",
+                "text_size": "normal_v2",
+                "margin": "0px 0px 0px 0px",
+                "element_id": "elem_1"
+            },
+            {
+                "tag": "column_set",
+                "horizontal_align": "left",
+                "columns": [
+                    {
+                        "tag": "column",
+                        "width": "auto",
+                        "elements": [
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "tag": "plain_text",
+                                    "content": "Upvote"
+                                },
+                                "type": "default",
+                                "width": "default",
+                                "size": "medium",
+                                "behaviors": [
+                                    {
+                                        "type": "callback",
+                                        "value": "upvote"
+                                    }
+                                ],
+                                "margin": "0px 0px 0px 0px"
+                            },
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "tag": "plain_text",
+                                    "content": "Downvote"
+                                },
+                                "type": "default",
+                                "width": "default",
+                                "size": "medium",
+                                "behaviors": [
+                                    {
+                                        "type": "callback",
+                                        "value": "downvote"
+                                    }
+                                ],
+                                "margin": "0px 0px 0px 0px"
+                            },
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "tag": "plain_text",
+                                    "content": "Regenerate"
+                                },
+                                "type": "default",
+                                "width": "default",
+                                "size": "medium",
+                                "behaviors": [
+                                    {
+                                        "type": "callback",
+                                        "value": "regen"
+                                    }
+                                ],
+                                "margin": "0px 0px 0px 0px"
+                            }
+                        ],
+                        "direction": "horizontal",
+                        "vertical_spacing": "8px",
+                        "horizontal_align": "left",
+                        "vertical_align": "top"
+                    }
+                ],
+                "element_id": "elem_2"
+            }
+        ]
+    }
+}
+`
+
+func createCard(client *lark.Client) (string, error) {
+	// 创建请求对象
+	req := larkcardkit.NewCreateCardReqBuilder().
+		Body(larkcardkit.NewCreateCardReqBodyBuilder().
+			Type(`card_json`).
+			Data(card_content).
+			Build()).
+		Build()
+
+	// 发起请求
+	resp, err := client.Cardkit.V1.Card.Create(context.Background(), req)
+
+	// 处理错误
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return "", err
+	}
+
+	respJson, _ := json.Marshal(resp)
+	fmt.Println("Card reply:", string(respJson))
+	return *resp.Data.CardId, nil
+}
+
+func sendCardToUser(client *lark.Client, cardId string, messageId string, isThread bool) error {
+	sendContent := `{"type":"card","data":{"card_id":"` + cardId + `"}}`
+	// Using message API to reply the message
+	resp, err := client.Im.Message.Reply(context.Background(), larkim.NewReplyMessageReqBuilder().
+		MessageId(messageId).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType(larkim.MsgTypeInteractive).
+			ReplyInThread(isThread).
+			Content(sendContent).
+			Build()).
+		Build())
+
+	if err != nil || !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return err
+	}
+
+	respJson, _ := json.Marshal(resp)
+	fmt.Println("Reply message response:", string(respJson))
+	return nil
+}
+
+func updateCard(client *lark.Client, cardId string) error {
+	updateContent := `飞书emoji :OK::THUMBSUP:
+*斜体* **粗体** ~~删除线~~ 
+<font color='red'>这是红色文本</font>
+<text_tag color='blue'>标签</text_tag>
+<number_tag>1</number_tag>
+[文字链接](https://open.feishu.cn/server-docs/im-v1/message-reaction/emojis-introduce)
+<link icon='chat_outlined' url='https://open.feishu.cn' pc_url='' ios_url='' android_url=''>带图标的链接</link>
+<at id=all></at>
+- 无序列表1
+    - 无序列表 1.1
+- 无序列表2
+1. 有序列表1
+    1. 有序列表 1.1
+2. 有序列表2
+JSON
+{"This is": "JSON demo"}
+
+inline-code
+# 一级标题
+## 二级标题
+> 这是一段引用
+
+ | Syntax | Description |
+| -------- | -------- |
+| Header | Title |
+| Paragraph | Text |"`
+	req := larkcardkit.NewContentCardElementReqBuilder().
+		CardId(cardId).
+		ElementId(`elem_1`).
+		Body(larkcardkit.NewContentCardElementReqBodyBuilder().
+			Uuid(`191857678434`).
+			Content(updateContent).
+			Sequence(1).
+			Build()).
+		Build()
+
+	// 发起请求
+	resp, err := client.Cardkit.V1.CardElement.Content(context.Background(), req)
+
+	// 处理错误
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return err
+	}
+
+	// 业务处理
+	fmt.Println("card update resp: ", larkcore.Prettify(resp))
+	return nil
+}
+
+// TODO: We cannot get the messages with interactive MsgType.
+// https://open.feishu.cn/search?from=header&page=1&pageSize=10&q=%E8%8E%B7%E5%8F%96%E5%8D%A1%E7%89%87%E5%86%85%E5%AE%B9&topicFilter=
+func getAllMessagesInThread(client *lark.Client, threadId string) error {
+	req := larkim.NewListMessageReqBuilder().
+		ContainerIdType("thread").
+		ContainerId(threadId).
+		SortType("ByCreateTimeAsc").
+		// PageSize(20).
+		// PageToken(`GxmvlNRvP0NdQZpa7yIqf_Lv_QuBwTQ8tXkX7w-irAghVD_TvuYd1aoJ1LQph86O-XImC4X9j9FhUPhXQDvtrQ==`).
+		Build()
+
+	// Get all history messages in the thread
+	resp, err := client.Im.V1.Message.List(context.Background(), req)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	if !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return nil
+	}
+	fmt.Println("======", larkcore.Prettify(resp))
+
+	hisContents := []MessagePostContent{}
+	for _, msg := range resp.Data.Items {
+		// We only handle text and post messages
+		content := MessagePostContent{}
+		if *msg.MsgType == larkim.MsgTypeText {
+			// For convience, we transform text into post
+			text := Text{}
+			err := json.Unmarshal([]byte(*msg.Body.Content), &text)
+			if err != nil {
+				fmt.Println("Unmarshal history messages failed, error:", err)
+				return nil
+			}
+			content.Content = MessagePostElements{{&MessagePostText{Tag: "text", Text: text.Text, Style: nil}}}
+		} else if *msg.MsgType == larkim.MsgTypePost {
+			mc := *msg.Body.Content
+			err := json.Unmarshal([]byte(mc), &content)
+			if err != nil {
+				fmt.Println("Unmarshal history messages failed, error:", err)
+				return nil
+			}
+		} else {
+			fmt.Println("Unsupported message type:", *msg.MsgType)
+			continue
+		}
+		content.FromApp = *msg.Sender.SenderType == "app"
+		hisContents = append(hisContents, content)
+	}
+	hms, _ := json.Marshal(hisContents)
+	fmt.Println("History messages:", string(hms))
+	fmt.Println("Text and code:", getTextAndCode(hisContents))
+}
+
 func main() {
 	app_id := os.Getenv("FEISHU_APP_ID")
 	app_secret := os.Getenv("FEISHU_APP_SECRET")
-
-	if app_id == "" || app_secret == "" {
-		fmt.Println("Error: FEISHU_APP_ID and FEISHU_APP_SECRET environment variables must be set")
-		os.Exit(1)
-	}
 
 	/**
 	 * 创建 LarkClient 对象，用于请求OpenAPI。
@@ -222,98 +491,25 @@ func main() {
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			fmt.Printf("[OnP2MessageReceiveV1 access], data: %s\n", larkcore.Prettify(event))
 
-			recvContent := *event.Event.Message.Content
-			var sendContent string
-			switch *event.Event.Message.MessageType {
-			case larkim.MsgTypeText:
-				text := Text{}
-				err := json.Unmarshal([]byte(*event.Event.Message.Content), &text)
-				if err != nil {
-					fmt.Println("Unmarshal text failed, error:", err)
-					return nil
-				}
-				sendContent = `{"zh_cn":{"title":"", "content":[[{"tag":"text", "text":"` + text.Text + `"}]]}}`
-			case larkim.MsgTypePost:
-				post := MessagePostContent{}
-				err := json.Unmarshal([]byte(*event.Event.Message.Content), &post)
-				if err != nil {
-					fmt.Println("Unmarshal post failed, error:", err)
-					return nil
-				}
-				postJson, _ := json.Marshal(post)
-				fmt.Println("Post:", string(postJson))
-				sendContent = `{"zh_cn":` + recvContent + `}`
-			default:
-				fmt.Println("Unsupported message type:", *event.Event.Message.MessageType)
+			threadId := event.Event.Message.ThreadId
+			if threadId != nil {
+				getAllMessagesInThread(client, *event.Event.Message.ThreadId)
 			}
 
-			hasThreadId := event.Event.Message.ThreadId != nil
-			if hasThreadId {
-				threadId := *event.Event.Message.ThreadId
-				req := larkim.NewListMessageReqBuilder().
-					ContainerIdType("thread").
-					ContainerId(threadId).
-					SortType("ByCreateTimeAsc").
-					// PageSize(20).
-					// PageToken(`GxmvlNRvP0NdQZpa7yIqf_Lv_QuBwTQ8tXkX7w-irAghVD_TvuYd1aoJ1LQph86O-XImC4X9j9FhUPhXQDvtrQ==`).
-					Build()
-
-				// Get all history messages in the thread
-				resp, err := client.Im.V1.Message.List(context.Background(), req)
+			{
+				cardId, err := createCard(client)
 				if err != nil {
-					fmt.Println(err)
+					fmt.Println("Create card failed, error:", err)
 					return nil
 				}
-				if !resp.Success() {
-					fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+				err = sendCardToUser(client, cardId, *event.Event.Message.MessageId, threadId != nil)
+				if err != nil {
+					fmt.Println("Send card failed, error:", err)
 					return nil
 				}
-				fmt.Println("======", larkcore.Prettify(resp))
 
-				hisContents := []MessagePostContent{}
-				for _, msg := range resp.Data.Items {
-					// We only handle text and post messages
-					content := MessagePostContent{}
-					if *msg.MsgType == larkim.MsgTypeText {
-						// For convience, we transform text into post
-						text := Text{}
-						err := json.Unmarshal([]byte(*msg.Body.Content), &text)
-						if err != nil {
-							fmt.Println("Unmarshal history messages failed, error:", err)
-							return nil
-						}
-						content.Content = MessagePostElements{{&MessagePostText{Tag: "text", Text: text.Text, Style: nil}}}
-					} else if *msg.MsgType == larkim.MsgTypePost {
-						mc := *msg.Body.Content
-						err := json.Unmarshal([]byte(mc), &content)
-						if err != nil {
-							fmt.Println("Unmarshal history messages failed, error:", err)
-							return nil
-						}
-					} else {
-						fmt.Println("Unsupported message type:", *msg.MsgType)
-						continue
-					}
-					content.FromApp = *msg.Sender.SenderType == "app"
-					hisContents = append(hisContents, content)
-				}
-				hms, _ := json.Marshal(hisContents)
-				fmt.Println("History messages:", string(hms))
-				fmt.Println("Text and code:", getTextAndCode(hisContents))
-			}
-
-			resp, err := client.Im.Message.Reply(context.Background(), larkim.NewReplyMessageReqBuilder().
-				MessageId(*event.Event.Message.MessageId).
-				Body(larkim.NewReplyMessageReqBodyBuilder().
-					MsgType(larkim.MsgTypePost).
-					ReplyInThread(hasThreadId).
-					Content(sendContent).
-					Build()).
-				Build())
-
-			if err != nil || !resp.Success() {
-				fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
-				return nil
+				// Update card content interactively
+				go updateCard(client, cardId)
 			}
 
 			return nil
