@@ -359,21 +359,22 @@ func sendCardToUser(client *lark.Client, cardId string, messageId string, isThre
 
 func updateCard(client *lark.Client, cardId string) error {
 
-	updateContent := `飞书emoji :OK::THUMBSUP:
-	*斜体* **粗体** ~~删除线~~ 
-	<font color='red'>这是红色文本</font>
-	<text_tag color='blue'>标签</text_tag>
-	<number_tag>1</number_tag>
-	[文字链接](https://open.feishu.cn/server-docs/im-v1/message-reaction/emojis-introduce)
-	<link icon='chat_outlined' url='https://open.feishu.cn' pc_url='' ios_url='' android_url=''>带图标的链接</link>
-	<at id=all></at>
-	- 无序列表1
-		- 无序列表 1.1
-	- 无序列表2
-	1. 有序列表1
-		1. 有序列表 1.1
-	2. 有序列表2
-	` + "\n```JSON\n{" + `"This is": "JSON demo"}` + "\n```\n" + "`inline-code`\n" + `
+	updateContent := `
+飞书emoji :OK::THUMBSUP:
+*斜体* **粗体** ~~删除线~~ 
+<font color='red'>这是红色文本</font>
+<text_tag color='blue'>标签</text_tag>
+<number_tag>1</number_tag>
+[文字链接](https://open.feishu.cn/server-docs/im-v1/message-reaction/emojis-introduce)
+<link icon='chat_outlined' url='https://open.feishu.cn' pc_url='' ios_url='' android_url=''>带图标的链接</link>
+<at id=all></at>
+- 无序列表1
+	- 无序列表 1.1
+- 无序列表2
+1. 有序列表1
+	1. 有序列表 1.1
+2. 有序列表2
+` + "\n```JSON\n{" + `"This is": "JSON demo"}` + "\n```\n" + "`inline-code`\n" + `
 
 # 一级标题
 ## 二级标题
