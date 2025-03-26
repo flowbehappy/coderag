@@ -374,14 +374,15 @@ func updateCard(client *lark.Client, cardId string) error {
 		1. 有序列表 1.1
 	2. 有序列表2
 	` + "\n```JSON\n{" + `"This is": "JSON demo"}` + "\n```\n" + "`inline-code`\n" + `
-	# 一级标题
-	## 二级标题
-	> 这是一段引用
-	
-	 | Syntax | Description |
-	| -------- | -------- |
-	| Header | Title |
-	| Paragraph | Text |"`
+
+# 一级标题
+## 二级标题
+> 这是一段引用
+
+| Syntax | Description |
+| -------- | -------- |
+| Header | Title |
+| Paragraph | Text |"`
 
 	req := larkcardkit.NewContentCardElementReqBuilder().
 		CardId(cardId).
