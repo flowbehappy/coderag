@@ -493,7 +493,8 @@ func main() {
 		 */
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			fmt.Printf("[OnP2MessageReceiveV1 access], data: %s\n", larkcore.Prettify(event))
-			if event.Event != nil && event.Event.Message != nil && event.Event.Message.Mentions != nil {
+			switch *event.Event.Message.ChatType {
+			case "group":
 				ms := event.Event.Message.Mentions
 				atMe := false
 				for _, mention := range ms {
@@ -505,7 +506,8 @@ func main() {
 				if !atMe {
 					return nil
 				}
-			} else {
+			case "p2p":
+			case "topic_group":
 				return nil
 			}
 
