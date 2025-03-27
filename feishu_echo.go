@@ -10,13 +10,9 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
-	larkcardkit "github.com/larksuite/oapi-sdk-go/v3/service/cardkit/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
-
-// go embed card.json
-var card_content string
 
 type Text struct {
 	Text string `json:"text,omitempty"`
@@ -198,35 +194,6 @@ func getTextAndCode(contents []MessagePostContent) string {
 	return result.String()
 }
 
-func createCard(client *lark.Client) (string, error) {
-	// 创建请求对象
-	req := larkcardkit.NewCreateCardReqBuilder().
-		Body(larkcardkit.NewCreateCardReqBodyBuilder().
-			Type(`card_json`).
-			Data(card_content).
-			Build()).
-		Build()
-
-	// 发起请求
-	resp, err := client.Cardkit.V1.Card.Create(context.Background(), req)
-
-	// 处理错误
-	if err != nil {
-		fmt.Println(err)
-		return "", err
-	}
-
-	// 服务端错误处理
-	if !resp.Success() {
-		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
-		return "", err
-	}
-
-	respJson, _ := json.Marshal(resp)
-	fmt.Println("Card reply:", string(respJson))
-	return *resp.Data.CardId, nil
-}
-
 func sendCardToUser(client *lark.Client, cardId string, messageId string, isThread bool) error {
 	sendContent := `{"type":"card","data":{"card_id":"` + cardId + `"}}`
 	// Using message API to reply the message
@@ -246,37 +213,6 @@ func sendCardToUser(client *lark.Client, cardId string, messageId string, isThre
 
 	respJson, _ := json.Marshal(resp)
 	fmt.Println("Reply message response:", string(respJson))
-	return nil
-}
-
-func updateCard(client *lark.Client, cardId string, result string) error {
-	req := larkcardkit.NewContentCardElementReqBuilder().
-		CardId(cardId).
-		ElementId(`elem_1`).
-		Body(larkcardkit.NewContentCardElementReqBodyBuilder().
-			Uuid(`191857678434`).
-			Content(result).
-			Sequence(1).
-			Build()).
-		Build()
-
-	// 发起请求
-	resp, err := client.Cardkit.V1.CardElement.Content(context.Background(), req)
-
-	// 处理错误
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	// 服务端错误处理
-	if !resp.Success() {
-		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
-		return err
-	}
-
-	// 业务处理
-	fmt.Println("card update resp: ", larkcore.Prettify(resp))
 	return nil
 }
 
@@ -411,7 +347,7 @@ func main() {
 			// Update card content interactively
 			go func() {
 				result := request(respContent["text"])
-				updateCard(client, cardId, result)
+				updateCardContent(client, cardId, result)
 			}()
 
 			return nil
