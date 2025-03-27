@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -15,6 +14,9 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
+
+// go embed card.json
+var card_content string
 
 type Text struct {
 	Text string `json:"text,omitempty"`
@@ -196,116 +198,6 @@ func getTextAndCode(contents []MessagePostContent) string {
 	return result.String()
 }
 
-var card_content = `
-{
-    "schema": "2.0",
-    "config": {
-        "update_multi": true,
-        "streaming_mode": true,
-        "streaming_config": {
-            "print_step": {
-                "default": 1
-            },
-            "print_frequency_ms": {
-                "default": 70
-            },
-            "print_strategy": "delay"
-        },
-        "style": {
-            "text_size": {
-                "normal_v2": {
-                    "default": "normal",
-                    "pc": "normal",
-                    "mobile": "heading"
-                }
-            }
-        }
-    },
-    "body": {
-        "direction": "vertical",
-        "padding": "12px 12px 12px 12px",
-        "elements": [
-            {
-                "tag": "markdown",
-                "content": "",
-                "text_align": "left",
-                "text_size": "normal_v2",
-                "margin": "0px 0px 0px 0px",
-                "element_id": "elem_1"
-            },
-            {
-                "tag": "column_set",
-                "horizontal_align": "left",
-                "columns": [
-                    {
-                        "tag": "column",
-                        "width": "auto",
-                        "elements": [
-                            {
-                                "tag": "button",
-                                "text": {
-                                    "tag": "plain_text",
-                                    "content": "Upvote"
-                                },
-                                "type": "default",
-                                "width": "default",
-                                "size": "medium",
-                                "behaviors": [
-                                    {
-                                        "type": "callback",
-                                        "value": "upvote"
-                                    }
-                                ],
-                                "margin": "0px 0px 0px 0px"
-                            },
-                            {
-                                "tag": "button",
-                                "text": {
-                                    "tag": "plain_text",
-                                    "content": "Downvote"
-                                },
-                                "type": "default",
-                                "width": "default",
-                                "size": "medium",
-                                "behaviors": [
-                                    {
-                                        "type": "callback",
-                                        "value": "downvote"
-                                    }
-                                ],
-                                "margin": "0px 0px 0px 0px"
-                            },
-                            {
-                                "tag": "button",
-                                "text": {
-                                    "tag": "plain_text",
-                                    "content": "Regenerate"
-                                },
-                                "type": "default",
-                                "width": "default",
-                                "size": "medium",
-                                "behaviors": [
-                                    {
-                                        "type": "callback",
-                                        "value": "regen"
-                                    }
-                                ],
-                                "margin": "0px 0px 0px 0px"
-                            }
-                        ],
-                        "direction": "horizontal",
-                        "vertical_spacing": "8px",
-                        "horizontal_align": "left",
-                        "vertical_align": "top"
-                    }
-                ],
-                "element_id": "elem_2"
-            }
-        ]
-    }
-}
-`
-
 func createCard(client *lark.Client) (string, error) {
 	// 创建请求对象
 	req := larkcardkit.NewCreateCardReqBuilder().
@@ -357,40 +249,13 @@ func sendCardToUser(client *lark.Client, cardId string, messageId string, isThre
 	return nil
 }
 
-func updateCard(client *lark.Client, cardId string) error {
-
-	updateContent := `
-飞书emoji :OK::THUMBSUP:
-*斜体* **粗体** ~~删除线~~ 
-<font color='red'>这是红色文本</font>
-<text_tag color='blue'>标签</text_tag>
-<number_tag>1</number_tag>
-[文字链接](https://open.feishu.cn/server-docs/im-v1/message-reaction/emojis-introduce)
-<link icon='chat_outlined' url='https://open.feishu.cn' pc_url='' ios_url='' android_url=''>带图标的链接</link>
-<at id=all></at>
-- 无序列表1
-	- 无序列表 1.1
-- 无序列表2
-1. 有序列表1
-	1. 有序列表 1.1
-2. 有序列表2
-` + "\n```JSON\n{" + `"This is": "JSON demo"}` + "\n```\n" + "`inline-code`\n" + `
-
-# 一级标题
-## 二级标题
-> 这是一段引用
-
-| Syntax | Description |
-| -------- | -------- |
-| Header | Title |
-| Paragraph | Text |"`
-
+func updateCard(client *lark.Client, cardId string, result string) error {
 	req := larkcardkit.NewContentCardElementReqBuilder().
 		CardId(cardId).
 		ElementId(`elem_1`).
 		Body(larkcardkit.NewContentCardElementReqBodyBuilder().
 			Uuid(`191857678434`).
-			Content(updateContent).
+			Content(result).
 			Sequence(1).
 			Build()).
 		Build()
@@ -511,29 +376,43 @@ func main() {
 				return nil
 			}
 
+			/**
+			 * 解析用户发送的消息。
+			 * Parse the message sent by the user.
+			 */
+			var respContent map[string]string
+			err := json.Unmarshal([]byte(*event.Event.Message.Content), &respContent)
+			/**
+			 * 检查消息类型是否为文本
+			 * Check if the message type is text
+			 */
+			if err != nil || *event.Event.Message.MessageType != "text" {
+				respContent = map[string]string{
+					"text": "解析消息失败，请发送文本消息\nparse message failed, please send text message",
+				}
+			}
+
 			threadId := event.Event.Message.ThreadId
 			if threadId != nil {
 				getAllMessagesInThread(client, *event.Event.Message.ThreadId)
 			}
 
-			{
-				cardId, err := createCard(client)
-				if err != nil {
-					fmt.Println("Create card failed, error:", err)
-					return nil
-				}
-				err = sendCardToUser(client, cardId, *event.Event.Message.MessageId, threadId != nil)
-				if err != nil {
-					fmt.Println("Send card failed, error:", err)
-					return nil
-				}
-
-				// Update card content interactively
-				go func() {
-					time.Sleep(1 * time.Second)
-					updateCard(client, cardId)
-				}()
+			cardId, err := createCard(client)
+			if err != nil {
+				fmt.Println("Create card failed, error:", err)
+				return nil
 			}
+			err = sendCardToUser(client, cardId, *event.Event.Message.MessageId, threadId != nil)
+			if err != nil {
+				fmt.Println("Send card failed, error:", err)
+				return nil
+			}
+
+			// Update card content interactively
+			go func() {
+				result := request(respContent["text"])
+				updateCard(client, cardId, result)
+			}()
 
 			return nil
 		})
