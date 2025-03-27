@@ -13,13 +13,28 @@ import (
 // go embed card.json
 var cardContent string
 
+// see https://open.feishu.cn/document/uAjLw4CM/ukzMukzMukzM/feishu-cards/card-json-v2-structure
 type cardConfig struct {
-	StreamingMode            bool   `json:"streaming_mode"`
-	EnableForward            bool   `json:"enable_forward"`
-	UpdateMulti              bool   `json:"update_multi"`
-	WidthMode                string `json:"width_mode"`
-	EnableForwardInteraction bool   `json:"enable_forward_interaction"`
+	StreamingMode            bool   `json:"streaming_mode,omitempty"`
+	EnableForward            bool   `json:"enable_forward,omitempty"`
+	UpdateMulti              bool   `json:"update_multi,omitempty"`
+	WidthMode                string `json:"width_mode,omitempty"`
+	EnableForwardInteraction bool   `json:"enable_forward_interaction,omitempty"`
+	Summary                  Summary
 	//
+}
+
+func (c *cardConfig) SetStreamingMode(mode bool) {
+	c.StreamingMode = mode
+}
+
+func (c *cardConfig) UpdateSummary(summary Summary) {
+	c.Summary = summary
+}
+
+type Summary struct {
+	Content     string            `json:"content,omitempty"`
+	I18nContent map[string]string `json:"i18n_content,omitempty"` // 摘要信息的多语言配置。了解支持的所有语种。参考配置卡片多语言文档。
 }
 
 func createCard(client *lark.Client) (string, error) {
@@ -51,6 +66,8 @@ func createCard(client *lark.Client) (string, error) {
 	return *resp.Data.CardId, nil
 }
 
+// 1. 关闭卡片的流式更新模式以交互更新的方式更新卡片,将 streaming_mode 字段值设置为 false 关闭流式
+// 2. [生成中] 的摘要文本由卡片 JSON 中的 summary 属性控制
 func updateCardConfig(client *lark.Client, cardId string, config cardConfig) error {
 	data, err := json.Marshal(config)
 	if err != nil {
@@ -59,7 +76,7 @@ func updateCardConfig(client *lark.Client, cardId string, config cardConfig) err
 	req := larkcardkit.NewSettingsCardReqBuilder().
 		CardId(cardId).
 		Body(larkcardkit.NewSettingsCardReqBodyBuilder().
-			Settings(data).
+			Settings(string(data)).
 			Uuid(`191857678434`).
 			Sequence(1).
 			Build()).
