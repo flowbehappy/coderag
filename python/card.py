@@ -1,5 +1,4 @@
 import json
-from typing import Optional
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import *
 from type import *
@@ -63,7 +62,7 @@ def update_card_config(client: lark.Client, card_id: str, config: CardConfig) ->
 def update_card_content(client: lark.Client, card_id: str, content: str) -> bool:
     req = ContentCardElementRequest.builder() \
         .card_id(card_id) \
-        .element_id("elem_1") \
+        .element_id("content") \
         .request_body(ContentCardElementRequestBody.builder()
                       .uuid("191857678434")
                       .content(content)

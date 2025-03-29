@@ -7,6 +7,10 @@ from dotenv import load_dotenv
 import lark_oapi as lark
 from lark_oapi.api.application.v6 import *
 from lark_oapi.api.im.v1 import *
+from lark_oapi.event.callback.model.p2_card_action_trigger import (
+    P2CardActionTrigger,
+    P2CardActionTriggerResponse,
+)
 
 import card
 from type import *
@@ -84,6 +88,21 @@ def send_card_to_user(client: lark.Client, card_id: str, message_id: str, is_thr
             f"Card sent successfully")
 
 
+def get_message_by_message_id(message_id: str) -> Optional[str]:
+    req = GetMessageRequest.builder() \
+        .message_id(message_id) \
+        .build()
+    resp = client.im.v1.message.list(req)
+    if not resp.success():
+        lark.logger.error(f"Error getting messages: {resp.code}, {resp.msg}")
+        return None
+    lark.logger.info("recived message by message id: %s nums:%d",
+                     message_id, len(resp.data.items))
+    if len(resp.data.items) < 1:
+        return None
+    return resp.data.items[0].body.content
+
+
 def get_all_messages_in_thread(client: lark.Client, thread_id: str) -> None:
     req = ListMessageRequest.builder() \
         .container_id_type("thread") \
@@ -151,6 +170,29 @@ def do_p2_im_message_receive_v1(data: P2ImMessageReceiveV1) -> None:
     asyncio.create_task(update_task())
 
 
+# see https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/event-subscription-guide/callback-subscription/configure-callback-request-address
+def do_p2_card_action_trigger(data: P2CardActionTrigger) -> P2CardActionTriggerResponse:
+    action = data.event.action
+    # Use action to distinguish different buttons. You can configure the action of the button in the card building tool.
+    # Here, handle the situation where the user clicks the "Initiate Alarm" button on the welcome card.
+    match action.value["action"]:
+        case "refresh":
+            message_id = data.event.context.open_message_id
+            card_id = card.create_card(client)
+            send_card_to_user(
+                client, card_id, message_id, False)
+            res_content = get_message_by_message_id(message_id)
+
+            async def update_task():
+                card.update_card_content(client, card_id, "")
+                think_content, reply_content = await request(res_content)
+                lark.logger.info(
+                    "recieve message from LLM\nthink_content: %s\nreply_content: %s", think_content, reply_content)
+                card.update_card_content(client, card_id, reply_content)
+            asyncio.create_task(update_task())
+    return P2CardActionTriggerResponse({})
+
+
 if __name__ == "__main__":
     load_dotenv(verbose=True)
     app_id = os.getenv("APP_ID")
@@ -159,6 +201,7 @@ if __name__ == "__main__":
     client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
     event_handler = lark.EventDispatcherHandler.builder("", "") \
         .register_p2_im_message_receive_v1(do_p2_im_message_receive_v1) \
+        .register_p2_card_action_trigger(do_p2_card_action_trigger) \
         .build()
 
     ws_client = lark.ws.Client(

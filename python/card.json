@@ -32,75 +32,57 @@
                 "text_align": "left",
                 "text_size": "normal_v2",
                 "margin": "0px 0px 0px 0px",
-                "element_id": "elem_1"
+                "element_id": "content"
             },
             {
                 "tag": "column_set",
+                "horizontal_spacing": "0px",
                 "horizontal_align": "left",
                 "columns": [
                     {
                         "tag": "column",
-                        "width": "auto",
+                        "width": "weighted",
+                        "elements": [],
+                        "padding": "0px 0px 0px 0px",
+                        "vertical_align": "top",
+                        "vertical_spacing": "2px",
+                        "weight": 5
+                    },
+                    {
+                        "tag": "column",
+                        "width": "30px",
                         "elements": [
                             {
                                 "tag": "button",
                                 "text": {
                                     "tag": "plain_text",
-                                    "content": "Upvote"
+                                    "content": ""
                                 },
-                                "type": "default",
-                                "width": "default",
+                                "type": "danger_text",
+                                "width": "fill",
                                 "size": "medium",
-                                "behaviors": [
-                                    {
-                                        "type": "callback",
-                                        "value": "upvote"
-                                    }
-                                ],
-                                "margin": "0px 0px 0px 0px"
-                            },
-                            {
-                                "tag": "button",
-                                "text": {
+                                "icon": {
+                                    "tag": "standard_icon",
+                                    "token": "replace_outlined"
+                                },
+                                "hover_tips": {
                                     "tag": "plain_text",
-                                    "content": "Downvote"
+                                    "content": "重试"
                                 },
-                                "type": "default",
-                                "width": "default",
-                                "size": "medium",
                                 "behaviors": [
                                     {
                                         "type": "callback",
-                                        "value": "downvote"
+                                        "value": "refresh"
                                     }
-                                ],
-                                "margin": "0px 0px 0px 0px"
-                            },
-                            {
-                                "tag": "button",
-                                "text": {
-                                    "tag": "plain_text",
-                                    "content": "Regenerate"
-                                },
-                                "type": "default",
-                                "width": "default",
-                                "size": "medium",
-                                "behaviors": [
-                                    {
-                                        "type": "callback",
-                                        "value": "regen"
-                                    }
-                                ],
-                                "margin": "0px 0px 0px 0px"
+                                ]
                             }
                         ],
-                        "direction": "horizontal",
-                        "vertical_spacing": "8px",
-                        "horizontal_align": "left",
-                        "vertical_align": "top"
+                        "padding": "0px 0px 0px 0px",
+                        "vertical_align": "center",
+                        "vertical_spacing": "2px"
                     }
                 ],
-                "element_id": "elem_2"
+                "margin": "16px 0px 0px 0px"
             }
         ]
     }
