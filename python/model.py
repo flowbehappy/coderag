@@ -138,13 +138,13 @@ def split_think_content(text: str) -> Tuple[str, str]:
     return think_content, reply_content
 
 
-async def request(data: str | None, model: str = DEFAULT_MODEL) -> str:
+async def request(data: str | None, model: str = DEFAULT_MODEL) -> Tuple[str, str]:
     if data is None:
         return "please input text!"
     p = BedrockProvider(model)
     result = p.generate(data)
     think_content, reply_content = split_think_content(result)
-    return reply_content
+    return think_content, reply_content
 
 
 model = "us.deepseek.r1-v1:0"

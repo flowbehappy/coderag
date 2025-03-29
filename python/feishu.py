@@ -80,7 +80,8 @@ def send_card_to_user(client: lark.Client, card_id: str, message_id: str, is_thr
     if not resp.success():
         lark.logger.error(f"Error sending card: {resp.code}, {resp.msg}")
     else:
-        lark.logger.info(f"Card sent successfully: {resp.data}")
+        lark.logger.info(
+            f"Card sent successfully")
 
 
 def get_all_messages_in_thread(client: lark.Client, thread_id: str) -> None:
@@ -142,8 +143,10 @@ def do_p2_im_message_receive_v1(data: P2ImMessageReceiveV1) -> None:
 
     # 更新卡片
     async def update_task():
-        result = await request(res_content)
-        card.update_card_content(client, card_id, result)
+        think_content, reply_content = await request(res_content)
+        lark.logger.info(
+            "recieve message from LLM\nthink_content: %s\nreply_content: %s", think_content, reply_content)
+        card.update_card_content(client, card_id, reply_content)
 
     asyncio.create_task(update_task())
 
@@ -159,5 +162,5 @@ if __name__ == "__main__":
         .build()
 
     ws_client = lark.ws.Client(
-        app_id, app_secret, lark.LogLevel.DEBUG, event_handler)
+        app_id, app_secret, lark.LogLevel.INFO, event_handler)
     ws_client.start()

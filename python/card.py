@@ -77,5 +77,5 @@ def update_card_content(client: lark.Client, card_id: str, content: str) -> bool
         return False
 
     lark.logger.info(
-        f"Card content updated:{lark.JSON.marshal(resp, indent=4)}")
+        f"Card content updated success")
     return True
