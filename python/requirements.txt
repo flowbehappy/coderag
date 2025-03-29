@@ -1,0 +1,3 @@
+lark_oapi
+python-dotenv
+boto3

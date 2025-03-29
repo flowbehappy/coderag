@@ -1,14 +1,14 @@
 import os
-from typing import Optional, Generator
+from typing import Optional, Generator, Tuple
 import json
-import logging
 import boto3
+import re
 
-logger = logging.getLogger(__name__)
 
-default_model = "us.deepseek.r1-v1:0"
+DEFAULT_MODEL = "us.deepseek.r1-v1:0"
+
 # TODO: support more models
-model_map = {
+MODEL_MAP = {
     "claude-3-sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
     "claude-3-5-sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "claude-3-5-sonnet-v2": "anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -45,7 +45,7 @@ class BedrockProvider:
         credentials = self.get_credentials()
         self.client = boto3.client("bedrock-runtime", **credentials)
 
-        self.model = model_map.get(model, default_model)
+        self.model = MODEL_MAP.get(model, DEFAULT_MODEL)
 
     def generate(
         self, prompt: str, system_prompt: Optional[str] = None, **kwargs
@@ -113,12 +113,42 @@ class BedrockProvider:
                 if chunk["type"] == "content_block_delta":
                     yield chunk["delta"].get("text", "")
         except Exception as e:
-            logger.error(f"Error during Bedrock streaming: {e}")
+            print(f"Error during Bedrock streaming: {e}")
             yield f"Error: {str(e)}"
 
 
+def split_think_content(text: str) -> Tuple[str, str]:
+    think_pattern = re.compile(
+        r'<think>\s*(.*?)\s*</think>',
+        re.DOTALL | re.IGNORECASE
+    )
+
+    think_matches = think_pattern.findall(text)
+
+    think_content = think_matches[-1].strip() if think_matches else ""
+
+    reply_content = think_pattern.sub('', text).strip()
+
+    if not think_matches:
+        reply_content = text.strip()
+
+    think_content = think_content if think_content else "[无思考内容]"
+    reply_content = reply_content if reply_content else "[无回复内容]"
+
+    return think_content, reply_content
+
+
+async def request(data: str | None, model: str = DEFAULT_MODEL) -> str:
+    if data is None:
+        return "please input text!"
+    p = BedrockProvider(model)
+    result = p.generate(data)
+    think_content, reply_content = split_think_content(result)
+    return reply_content
+
+
+model = "us.deepseek.r1-v1:0"
 if __name__ == "__main__":
-    model = "us.deepseek.r1-v1:0"
     prompt = "who are you"
     p = BedrockProvider(model)
     result = p.generate("prompt")
