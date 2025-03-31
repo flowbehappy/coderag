@@ -227,8 +227,8 @@ var card_content = `
         "direction": "vertical",
         "padding": "12px 12px 12px 12px",
         "elements": [
-            {"tag": "collapsible_panel",  "expanded": false, 
-				"header": { "title": {"tag": "plain_text", "content": "Thinking..."}, "icon": {"tag": "standard_icon", "token": "down-small-ccm_outlined","size": "16px 16px"},"icon_position": "right"},
+            {"tag": "collapsible_panel",  "expanded": false,
+				"header": { "title": {"tag": "plain_text", "content": "Think"}, "icon": {"tag": "standard_icon", "token": "down-small-ccm_outlined","size": "16px 16px"},"icon_position": "right"},
 				"elements":[{
                 "tag": "markdown",
                 "content": "",
@@ -237,14 +237,16 @@ var card_content = `
                 "margin": "0px 0px 0px 0px",
                 "element_id": "thinking"
             }]},
-            {
+            {"tag": "collapsible_panel",  "expanded": true,
+				"header": { "title": {"tag": "plain_text", "content": "Result"}, "icon": {"tag": "standard_icon", "token": "down-small-ccm_outlined","size": "16px 16px"},"icon_position": "right"},
+				"elements":[{
                 "tag": "markdown",
                 "content": "",
                 "text_align": "left",
                 "text_size": "normal_v2",
                 "margin": "0px 0px 0px 0px",
                 "element_id": "result"
-			},
+            }]},
             {
                 "tag": "column_set",
                 "horizontal_align": "left",
