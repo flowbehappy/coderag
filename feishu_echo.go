@@ -557,6 +557,15 @@ func getMessage(client *lark.Client, messageId string) (*larkim.GetMessageResp, 
 	return resp, nil
 }
 
+func genRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[uuid.New().ID()%uint32(len(charset))]
+	}
+	return string(b)
+}
+
 func main() {
 	app_id := os.Getenv("FEISHU_APP_ID")
 	app_secret := os.Getenv("FEISHU_APP_SECRET")
@@ -579,6 +588,13 @@ func main() {
 			return "", err
 		}
 		return cardId, nil
+	}
+
+	globalCardId := ""
+	nextSeq := 0
+	getSeq := func() int {
+		nextSeq++
+		return nextSeq
 	}
 
 	/**
@@ -621,10 +637,11 @@ func main() {
 				if err != nil {
 					return nil
 				}
+				globalCardId = cardId
 				// Update card content interactively
-				updateCardContent(client, cardId, "thinking", thiningContent, 1)
-				updateCardContent(client, cardId, "result", result, 2)
-				updateCardSummary(client, cardId, 3)
+				updateCardContent(client, cardId, "thinking", thiningContent, getSeq())
+				updateCardContent(client, cardId, "result", result, getSeq())
+				updateCardSummary(client, cardId, getSeq())
 			}
 
 			return nil
@@ -649,28 +666,29 @@ func main() {
 			} else if action == "regen" {
 				// Use another goroutine to avoid blocking the main thread
 				go func() {
-					messageId := event.Event.Context.OpenMessageID
-					message, err := getMessage(client, messageId)
-					if err != nil {
-						fmt.Printf("getMessage failed!", err)
-						return
-					}
-					threadId := message.Data.Items[0].ThreadId
+					// messageId := event.Event.Context.OpenMessageID
+					// message, err := getMessage(client, messageId)
+					// if err != nil {
+					// 	fmt.Printf("getMessage failed!", err)
+					// 	return
+					// }
+					// threadId := message.Data.Items[0].ThreadId
 
-					cardId, err := sendResult(client, messageId, threadId != nil)
+					// cardId, err := sendResult(client, messageId, threadId != nil)
 
-					updateCardContent(client, cardId, "thinking", thiningContent, 1)
-					updateCardContent(client, cardId, "result", newResult, 2)
-					updateCardSummary(client, cardId, 3)
+					updateCardContent(client, globalCardId, "thinking", thiningContent, getSeq())
+					updateCardContent(client, globalCardId, "result", genRandomString(100), getSeq())
+					updateCardSummary(client, globalCardId, getSeq())
 				}()
-			}
 
-			return &callback.CardActionTriggerResponse{
-				Toast: &callback.Toast{
-					Type:    "success",
-					Content: "Regenerating",
-				},
-			}, nil
+				return &callback.CardActionTriggerResponse{
+					Toast: &callback.Toast{
+						Type:    "success",
+						Content: "Regenerating",
+					},
+				}, nil
+			}
+			return nil, nil
 		})
 
 	/**
