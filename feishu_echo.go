@@ -7,9 +7,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/google/uuid"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
+	larkcardkit "github.com/larksuite/oapi-sdk-go/v3/service/cardkit/v1"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
@@ -194,6 +197,174 @@ func getTextAndCode(contents []MessagePostContent) string {
 	return result.String()
 }
 
+var card_content = `
+{
+    "schema": "2.0",
+    "config": {
+        "update_multi": true,
+        "streaming_mode": true,
+		"summary": {"content": "Generating..."},
+        "streaming_config": {
+            "print_step": {
+                "default": 1
+            },
+            "print_frequency_ms": {
+                "default": 10
+            },
+            "print_strategy": "delay"
+        },
+        "style": {
+            "text_size": {
+                "normal_v2": {
+                    "default": "normal",
+                    "pc": "normal",
+                    "mobile": "heading"
+                }
+            }
+        }
+    },
+    "body": {
+        "direction": "vertical",
+        "padding": "12px 12px 12px 12px",
+        "elements": [
+            {"tag": "collapsible_panel",  "expanded": false, 
+				"header": { "title": {"tag": "plain_text", "content": "Thinking..."}, "icon": {"tag": "standard_icon", "token": "down-small-ccm_outlined","size": "16px 16px"},"icon_position": "right"},
+				"elements":[{
+                "tag": "markdown",
+                "content": "",
+                "text_align": "left",
+                "text_size": "normal_v2",
+                "margin": "0px 0px 0px 0px",
+                "element_id": "thinking"
+            }]},
+            {
+                "tag": "markdown",
+                "content": "",
+                "text_align": "left",
+                "text_size": "normal_v2",
+                "margin": "0px 0px 0px 0px",
+                "element_id": "result"
+			},
+            {
+                "tag": "column_set",
+                "horizontal_align": "left",
+                "columns": [
+                    {
+                        "tag": "column",
+                        "width": "auto",
+                        "elements": [
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "tag": "plain_text",
+                                    "content": ""
+                                },
+                                "type": "default",
+                                "width": "default",
+                                "size": "medium",
+                                "icon": {
+                                    "tag": "standard_icon",
+                                    "token": "like_filled"
+                                },
+                                "behaviors": [
+                                    {
+                                        "type": "callback",
+                                        "value": {
+                                            "action": "upvote"
+                                        }
+                                    }
+                                ],
+                                "margin": "0px 0px 0px 0px"
+                            },
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "tag": "plain_text",
+                                    "content": ""
+                                },
+                                "type": "default",
+                                "width": "default",
+                                "size": "medium",
+                                "icon": {
+                                    "tag": "standard_icon",
+                                    "token": "thumbdown_outlined"
+                                },
+                                "behaviors": [
+                                    {
+                                        "type": "callback",
+                                        "value": {
+                                            "action": "downvote"
+                                        }
+                                    }
+                                ],
+                                "margin": "0px 0px 0px 0px"
+                            },
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "tag": "plain_text",
+                                    "content": ""
+                                },
+                                "type": "default",
+                                "width": "default",
+                                "size": "medium",
+                                "icon": {
+                                    "tag": "standard_icon",
+                                    "token": "refresh_outlined"
+                                },
+                                "behaviors": [
+                                    {
+                                        "type": "callback",
+                                        "value": {
+                                            "action": "regen"
+                                        }
+                                    }
+                                ],
+                                "margin": "0px 0px 0px 0px"
+                            }
+                        ],
+                        "direction": "horizontal",
+                        "vertical_spacing": "8px",
+                        "horizontal_align": "left",
+                        "vertical_align": "top"
+                    }
+                ],
+                "element_id": "elem_2"
+            }
+        ]
+    }
+}
+`
+
+func createCard(client *lark.Client) (string, error) {
+	// 创建请求对象
+	req := larkcardkit.NewCreateCardReqBuilder().
+		Body(larkcardkit.NewCreateCardReqBodyBuilder().
+			Type(`card_json`).
+			Data(card_content).
+			Build()).
+		Build()
+
+	// 发起请求
+	resp, err := client.Cardkit.V1.Card.Create(context.Background(), req)
+
+	// 处理错误
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return "", err
+	}
+
+	respJson, _ := json.Marshal(resp)
+	fmt.Println("Card reply:", string(respJson))
+	return *resp.Data.CardId, nil
+}
+
 func sendCardToUser(client *lark.Client, cardId string, messageId string, isThread bool) error {
 	sendContent := `{"type":"card","data":{"card_id":"` + cardId + `"}}`
 	// Using message API to reply the message
@@ -216,6 +387,103 @@ func sendCardToUser(client *lark.Client, cardId string, messageId string, isThre
 	return nil
 }
 
+var thiningContent = `
+嗯，用户问的是MCP，也就是Model Context Protocol是什么。首先，我需要确认自己对这个概念的理解是否正确。可能之前看过相关资料，但需要回忆一下。
+
+首先，Model Context Protocol听起来像是一个协议或者框架，可能与机器学习模型的上下文管理有关。根据之前的知识，MCP可能涉及模型训练、部署中的上下文信息管理，比如参数、环境配置、数据流等。需要确认具体定义和应用场景。
+
+....
+`
+
+var result = `
+飞书emoji :OK::THUMBSUP:
+*斜体* **粗体** ~~删除线~~ 
+<font color='red'>这是红色文本</font>
+<text_tag color='blue'>标签</text_tag>
+<number_tag>1</number_tag>
+[文字链接](https://open.feishu.cn/server-docs/im-v1/message-reaction/emojis-introduce)
+<link icon='chat_outlined' url='https://open.feishu.cn' pc_url='' ios_url='' android_url=''>带图标的链接</link>
+<at id=all></at>
+- 无序列表1
+	- 无序列表 1.1
+- 无序列表2
+1. 有序列表1
+	1. 有序列表 1.1
+2. 有序列表2
+` + "\n```JSON\n{" + `"This is": "JSON demo"}` + "\n```\n" + "`inline-code`\n" + `
+
+# 一级标题
+## 二级标题
+> 这是一段引用
+
+| Syntax | Description |
+| -------- | -------- |
+| Header | Title |
+| Paragraph | Text |"`
+
+var newResult = `New result`
+
+func updateCardContent(client *lark.Client, cardId string, elementId string, content string, seqNum int) error {
+	req := larkcardkit.NewContentCardElementReqBuilder().
+		CardId(cardId).
+		ElementId(elementId).
+		Body(larkcardkit.NewContentCardElementReqBodyBuilder().
+			Uuid(uuid.New().String()).
+			Content(content).
+			Sequence(seqNum).
+			Build()).
+		Build()
+
+	// 发起请求
+	resp, err := client.Cardkit.V1.CardElement.Content(context.Background(), req)
+
+	// 处理错误
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return err
+	}
+
+	// 业务处理
+	fmt.Println("card update resp: ", larkcore.Prettify(resp))
+	return nil
+}
+
+func updateCardSummary(client *lark.Client, cardId string, seqNum int) error {
+	req := larkcardkit.NewSettingsCardReqBuilder().
+		CardId(cardId).
+		Body(larkcardkit.NewSettingsCardReqBodyBuilder().
+			Settings(`{"config":{"summary":{"content":"Done"}}}`).
+			Uuid(uuid.New().String()).
+			Sequence(seqNum).
+			Build()).
+		Build()
+
+	// 发起请求
+	resp, err := client.Cardkit.V1.Card.Settings(context.Background(), req)
+
+	// 处理错误
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		fmt.Printf("logId: %s, error response: \n%s", resp.RequestId(), larkcore.Prettify(resp.CodeError))
+		return err
+	}
+
+	// 业务处理
+	fmt.Println(larkcore.Prettify(resp))
+	return nil
+}
+
 // TODO: We cannot get the messages with interactive MsgType.
 // https://open.feishu.cn/search?from=header&page=1&pageSize=10&q=%E8%8E%B7%E5%8F%96%E5%8D%A1%E7%89%87%E5%86%85%E5%AE%B9&topicFilter=
 func getAllMessagesInThread(client *lark.Client, threadId string) error {
@@ -223,8 +491,6 @@ func getAllMessagesInThread(client *lark.Client, threadId string) error {
 		ContainerIdType("thread").
 		ContainerId(threadId).
 		SortType("ByCreateTimeAsc").
-		// PageSize(20).
-		// PageToken(`GxmvlNRvP0NdQZpa7yIqf_Lv_QuBwTQ8tXkX7w-irAghVD_TvuYd1aoJ1LQph86O-XImC4X9j9FhUPhXQDvtrQ==`).
 		Build()
 
 	// Get all history messages in the thread
@@ -272,6 +538,23 @@ func getAllMessagesInThread(client *lark.Client, threadId string) error {
 	return nil
 }
 
+func getMessage(client *lark.Client, messageId string) (*larkim.GetMessageResp, error) {
+	req := larkim.NewGetMessageReqBuilder().
+		MessageId(messageId).
+		UserIdType(`open_id`).
+		Build()
+
+	// 发起请求
+	resp, err := client.Im.V1.Message.Get(context.Background(), req)
+	// 处理错误
+	if err != nil || !resp.Success() {
+		fmt.Println("Get message failed, error:", err)
+		return nil, err
+	}
+	fmt.Println("Get message resp:", larkcore.Prettify(resp))
+	return resp, nil
+}
+
 func main() {
 	app_id := os.Getenv("FEISHU_APP_ID")
 	app_secret := os.Getenv("FEISHU_APP_SECRET")
@@ -281,6 +564,20 @@ func main() {
 	 * Create LarkClient object for requesting OpenAPI
 	 */
 	client := lark.NewClient(app_id, app_secret)
+
+	sendResult := func(client *lark.Client, messageId string, toThread bool) (string, error) {
+		cardId, err := createCard(client)
+		if err != nil {
+			fmt.Println("Create card failed, error:", err)
+			return "", err
+		}
+		err = sendCardToUser(client, cardId, messageId, toThread)
+		if err != nil {
+			fmt.Println("Send card failed, error:", err)
+			return "", err
+		}
+		return cardId, nil
+	}
 
 	/**
 	 * 注册事件处理器。
@@ -312,45 +609,66 @@ func main() {
 				return nil
 			}
 
-			/**
-			 * 解析用户发送的消息。
-			 * Parse the message sent by the user.
-			 */
-			var respContent map[string]string
-			err := json.Unmarshal([]byte(*event.Event.Message.Content), &respContent)
-			/**
-			 * 检查消息类型是否为文本
-			 * Check if the message type is text
-			 */
-			if err != nil || *event.Event.Message.MessageType != "text" {
-				respContent = map[string]string{
-					"text": "解析消息失败，请发送文本消息\nparse message failed, please send text message",
-				}
-			}
-
 			threadId := event.Event.Message.ThreadId
 			if threadId != nil {
 				getAllMessagesInThread(client, *event.Event.Message.ThreadId)
 			}
 
-			cardId, err := createCard(client)
-			if err != nil {
-				fmt.Println("Create card failed, error:", err)
-				return nil
+			{
+				cardId, err := sendResult(client, *event.Event.Message.MessageId, threadId != nil)
+				if err != nil {
+					return nil
+				}
+				// Update card content interactively
+				updateCardContent(client, cardId, "thinking", thiningContent, 1)
+				updateCardContent(client, cardId, "result", result, 2)
+				updateCardSummary(client, cardId, 3)
 			}
-			err = sendCardToUser(client, cardId, *event.Event.Message.MessageId, threadId != nil)
-			if err != nil {
-				fmt.Println("Send card failed, error:", err)
-				return nil
-			}
-
-			// Update card content interactively
-			go func() {
-				result := request(respContent["text"])
-				updateCardContent(client, cardId, result)
-			}()
 
 			return nil
+		}).
+		OnP2CardActionTrigger(func(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+			fmt.Printf("[ OnP2CardActionTrigger access ], data: %s\n", larkcore.Prettify(event))
+			action := event.Event.Action.Value["action"]
+			if action == "upvote" {
+				return &callback.CardActionTriggerResponse{
+					Toast: &callback.Toast{
+						Type:    "success",
+						Content: "Upvoted",
+					},
+				}, nil
+			} else if action == "downvote" {
+				return &callback.CardActionTriggerResponse{
+					Toast: &callback.Toast{
+						Type:    "success",
+						Content: "Downvoted",
+					},
+				}, nil
+			} else if action == "regen" {
+				// Use another goroutine to avoid blocking the main thread
+				go func() {
+					messageId := event.Event.Context.OpenMessageID
+					message, err := getMessage(client, messageId)
+					if err != nil {
+						fmt.Printf("getMessage failed!", err)
+						return
+					}
+					threadId := message.Data.Items[0].ThreadId
+
+					cardId, err := sendResult(client, messageId, threadId != nil)
+
+					updateCardContent(client, cardId, "thinking", thiningContent, 1)
+					updateCardContent(client, cardId, "result", newResult, 2)
+					updateCardSummary(client, cardId, 3)
+				}()
+			}
+
+			return &callback.CardActionTriggerResponse{
+				Toast: &callback.Toast{
+					Type:    "success",
+					Content: "Regenerating",
+				},
+			}, nil
 		})
 
 	/**
