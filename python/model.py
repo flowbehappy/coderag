@@ -43,7 +43,8 @@ class BedrockProvider:
 
     def __init__(self, model: str, **kwargs):
         credentials = self.get_credentials()
-        self.client = boto3.client("bedrock-runtime", **credentials)
+        self.client = boto3.client(
+            "bedrock-runtime", **credentials)
 
         self.model = MODEL_MAP.get(model, DEFAULT_MODEL)
 
@@ -72,6 +73,40 @@ class BedrockProvider:
                     "temperature": 0.6,
                 },
                 messages=messages,
+                # toolConfig={
+                #     'tools': [
+                #         {
+                #             'toolSpec': {
+                #                 'name': 'get_weather',
+                #                 'description': 'Get the current weather in a given location',
+                #                 "inputSchema": {
+                #                     "json": {"location": "string", "unit": "string"}
+                # "type": "object",
+                # "properties": {
+                #     "location": {
+                #         "type": "string",
+                #         "description": "The city and state, e.g. San Francisco, CA"
+                #     },
+                #     "unit": {
+                #         "type": "string",
+                #         "enum": ["celsius", "fahrenheit"],
+                #         "description": "The unit of temperature, either \"celsius\" or \"fahrenheit\""
+                #     }
+                # },
+                # "required": ["location"]
+                #             }
+                #         }
+                #     },
+                # ],
+                # If supported by model, forces the model to request a tool.
+                # 'toolChoice': {
+                #     'auto': {},
+                #     'any': {},
+                #     'tool': {
+                #         'name': 'string'
+                #     }
+                # }
+                # },
             )
         answer = None
         reasoning = None
@@ -150,8 +185,8 @@ async def request(data: str | None, past_result=None, model: str = DEFAULT_MODEL
     return think_content, reply_content
 
 
-model = "us.deepseek.r1-v1:0"
 if __name__ == "__main__":
+    model = "claude-3-5-sonnet"
     prompt = "who are you"
     p = BedrockProvider(model)
     result = p.generate("prompt")

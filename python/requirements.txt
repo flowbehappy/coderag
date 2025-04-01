@@ -1,3 +1,4 @@
 lark_oapi
 python-dotenv
 boto3
+mysql-connector-python>=8.0,<8.1

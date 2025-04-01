@@ -2,7 +2,6 @@ import os
 import json
 import asyncio
 
-
 from dotenv import load_dotenv
 import lark_oapi as lark
 from lark_oapi.api.application.v6 import *
@@ -15,6 +14,7 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
 import card
 from type import *
 from model import request
+from database import DB
 
 
 def parse_message_post_content(data: str) -> MessagePostContent:
@@ -145,7 +145,6 @@ def get_all_messages_in_thread(client: lark.Client, thread_id: str, create_time:
             content = parse_message_post_content(msg.body.content)
         elif msg.msg_type == "interactive":
             continue
-            print("content", msg.body.content)
 
         content.from_app = msg.sender.sender_type == "app"
         his_contents.append(content)
@@ -174,7 +173,7 @@ def do_p2_im_message_receive_v1(data: P2ImMessageReceiveV1) -> None:
     create_time = data.event.message.create_time
 
     # 获取历史消息
-    past_result = None
+    past_result = [None]
     is_thread = thread_id is not None
     if is_thread:
         past_result = get_all_messages_in_thread(
@@ -235,7 +234,7 @@ if __name__ == "__main__":
     load_dotenv(verbose=True)
     app_id = os.getenv("APP_ID")
     app_secret = os.getenv("APP_SECRET")
-
+    db = DB()
     client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
     event_handler = lark.EventDispatcherHandler.builder("", "") \
         .register_p2_im_message_receive_v1(do_p2_im_message_receive_v1) \
