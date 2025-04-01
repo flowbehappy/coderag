@@ -8,7 +8,7 @@
                 "default": 1
             },
             "print_frequency_ms": {
-                "default": 70
+                "default": 10
             },
             "print_strategy": "delay"
         },
@@ -27,12 +27,38 @@
         "padding": "12px 12px 12px 12px",
         "elements": [
             {
+                "tag": "collapsible_panel",
+                "expanded": false,
+                "header": {
+                    "title": {
+                        "tag": "plain_text",
+                        "content": "Thinking..."
+                    },
+                    "icon": {
+                        "tag": "standard_icon",
+                        "token": "down-small-ccm_outlined",
+                        "size": "16px 16px"
+                    },
+                    "icon_position": "right"
+                },
+                "elements": [
+                    {
+                        "tag": "markdown",
+                        "content": "",
+                        "text_align": "left",
+                        "text_size": "normal_v2",
+                        "margin": "0px 0px 0px 0px",
+                        "element_id": "thinking"
+                    }
+                ]
+            },
+            {
                 "tag": "markdown",
                 "content": "",
                 "text_align": "left",
                 "text_size": "normal_v2",
                 "margin": "0px 0px 0px 0px",
-                "element_id": "content"
+                "element_id": "result"
             },
             {
                 "tag": "column_set",
@@ -72,7 +98,9 @@
                                 "behaviors": [
                                     {
                                         "type": "callback",
-                                        "value": "refresh"
+                                        "value": {
+                                            "action": "refresh"
+                                        }
                                     }
                                 ]
                             }

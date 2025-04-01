@@ -46,27 +46,10 @@ def parse_message_post_content(data: str) -> MessagePostContent:
     return content
 
 
-def get_text_and_code(contents: List[MessagePostContent]) -> str:
-    result = []
-    for i, content in enumerate(contents):
-        header = "From AI:\n" if content.from_app else "From User:\n"
-        result.append(header)
-
-        for j, row in enumerate(content.content):
-            row_text = ""
-            for elem in row:
-                if isinstance(elem, (MessagePostText, MessagePostCode)):
-                    row_text += elem.text
-            if row_text:
-                result.append(row_text)
-
-        if i < len(contents) - 1:
-            result.append("")
-
-    return "\n".join(result)
-
-
-def send_card_to_user(client: lark.Client, card_id: str, message_id: str, is_thread: bool) -> None:
+def send_card_to_user(client: lark.Client, card_id: str, message_id: str) -> None:
+    '''
+    send card reply in thread
+    '''
     send_content = json.dumps({
         "type": "card",
         "data": {"card_id": card_id}
@@ -76,7 +59,7 @@ def send_card_to_user(client: lark.Client, card_id: str, message_id: str, is_thr
                                       .message_id(message_id)
                                       .request_body(ReplyMessageRequestBody.builder()
                                                     .msg_type("interactive")
-                                                    .reply_in_thread(is_thread)
+                                                    .reply_in_thread(True)
                                                     .content(send_content)
                                                     .build())
                                       .build())
@@ -86,13 +69,15 @@ def send_card_to_user(client: lark.Client, card_id: str, message_id: str, is_thr
     else:
         lark.logger.info(
             f"Card sent successfully")
+    return resp.data.message_id
 
 
-def get_message_by_message_id(message_id: str) -> Optional[str]:
+def get_message_by_message_id(message_id: str):
     req = GetMessageRequest.builder() \
         .message_id(message_id) \
         .build()
-    resp = client.im.v1.message.list(req)
+    resp = client.request(req)
+    resp = client.im.v1.message.get(req)
     if not resp.success():
         lark.logger.error(f"Error getting messages: {resp.code}, {resp.msg}")
         return None
@@ -103,13 +88,47 @@ def get_message_by_message_id(message_id: str) -> Optional[str]:
     return resp.data.items[0].body.content
 
 
-def get_all_messages_in_thread(client: lark.Client, thread_id: str) -> None:
+def get_thread_id_by_message_id(message_id: str):
+    req = GetMessageRequest.builder() \
+        .message_id(message_id) \
+        .build()
+    resp = client.im.v1.message.get(req)
+    if not resp.success():
+        lark.logger.error(f"Error getting messages: {resp.code}, {resp.msg}")
+        return None
+    lark.logger.info("recived message by message id: %s nums:%d",
+                     message_id, len(resp.data.items))
+    if len(resp.data.items) < 1:
+        return None
+    item = resp.data.items[0]
+    return item.thread_id, item.create_time
+
+
+def get_text_and_code(contents: List[MessagePostContent]) -> List[Dict]:
+    result = []
+    for i, content in enumerate(contents):
+        msg = dict()
+        msg["role"] = "assistant" if content.from_app else "user"
+        for j, row in enumerate(content.content):
+            row_text = ""
+            for elem in row:
+                # add text and code
+                if isinstance(elem, (MessagePostText, MessagePostCode)):
+                    row_text += elem.text
+
+        msg["content"] = [{"text": row_text}]
+        result.append(msg)
+
+    return result
+
+
+def get_all_messages_in_thread(client: lark.Client, thread_id: str, create_time: str) -> List[Dict]:
     req = ListMessageRequest.builder() \
         .container_id_type("thread") \
         .container_id(thread_id) \
         .sort_type("ByCreateTimeAsc") \
+        .end_time(create_time) \
         .build()
-
     resp = client.im.v1.message.list(req)
     if not resp.success():
         lark.logger.error(f"Error getting messages: {resp.code}, {resp.msg}")
@@ -124,14 +143,16 @@ def get_all_messages_in_thread(client: lark.Client, thread_id: str) -> None:
             content.content = [[elem]]
         elif msg.msg_type == "post":
             content = parse_message_post_content(msg.body.content)
-        else:
+        elif msg.msg_type == "interactive":
             continue
+            print("content", msg.body.content)
 
         content.from_app = msg.sender.sender_type == "app"
         his_contents.append(content)
 
-    lark.logger.info(f"History messages: {his_contents}")
-    lark.logger.info(f"Text and code: {get_text_and_code(his_contents)}")
+    result = get_text_and_code(his_contents)
+    lark.logger.info(f"get past messages: {lark.json.dumps(result)}")
+    return result
 
 
 def do_p2_im_message_receive_v1(data: P2ImMessageReceiveV1) -> None:
@@ -150,22 +171,32 @@ def do_p2_im_message_receive_v1(data: P2ImMessageReceiveV1) -> None:
 
     thread_id = data.event.message.thread_id
     message_id = data.event.message.message_id
+    create_time = data.event.message.create_time
 
-    is_thread = thread_id is not None
     # 获取历史消息
+    past_result = None
+    is_thread = thread_id is not None
     if is_thread:
-        get_all_messages_in_thread(client, thread_id)
+        past_result = get_all_messages_in_thread(
+            client, thread_id, create_time)
 
     card_id = card.create_card(client)
-    send_card_to_user(
-        client, card_id, message_id, is_thread)
+    print("create card", card_id)
+    card_message_id = send_card_to_user(
+        client, card_id, message_id)
 
     # 更新卡片
+    # message_id msg_type content
     async def update_task():
-        think_content, reply_content = await request(res_content)
+        think_content, reply_content = await request(res_content, past_result[:-1])
         lark.logger.info(
             "recieve message from LLM\nthink_content: %s\nreply_content: %s", think_content, reply_content)
-        card.update_card_content(client, card_id, reply_content)
+        card.update_card_content(
+            client, card_id, "thinking", reply_content, seq=1)
+        card.update_card_content(
+            client, card_id, "result", reply_content, seq=2)
+        card.update_card_config(
+            client, card_id, CardConfig(summary=Summary(content="Done")), seq=3)
 
     asyncio.create_task(update_task())
 
@@ -178,17 +209,24 @@ def do_p2_card_action_trigger(data: P2CardActionTrigger) -> P2CardActionTriggerR
     match action.value["action"]:
         case "refresh":
             message_id = data.event.context.open_message_id
+            thread_id, create_time = get_thread_id_by_message_id(message_id)
+            past_result = get_all_messages_in_thread(
+                client, thread_id, create_time)
             card_id = card.create_card(client)
             send_card_to_user(
-                client, card_id, message_id, False)
-            res_content = get_message_by_message_id(message_id)
+                client, card_id, message_id)
 
             async def update_task():
-                card.update_card_content(client, card_id, "")
-                think_content, reply_content = await request(res_content)
+                last = past_result[-1]["content"][0]["text"]
+                think_content, reply_content = await request(last)
                 lark.logger.info(
                     "recieve message from LLM\nthink_content: %s\nreply_content: %s", think_content, reply_content)
-                card.update_card_content(client, card_id, reply_content)
+                card.update_card_content(
+                    client, card_id, "thinking", reply_content, seq=1)
+                card.update_card_content(
+                    client, card_id, "result", reply_content, seq=2)
+                card.update_card_config(
+                    client, card_id, CardConfig(summary=Summary(content="Done")), seq=3)
             asyncio.create_task(update_task())
     return P2CardActionTriggerResponse({})
 

@@ -83,7 +83,7 @@ class Summary:
 
 @dataclass
 class CardConfig:
-    streaming_mode: bool = False
+    streaming_mode: bool = True
     enable_forward: bool = False
     update_multi: bool = False
     width_mode: str = ""

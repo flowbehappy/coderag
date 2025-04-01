@@ -1,6 +1,10 @@
 import json
+import uuid
+from string import Template
+
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import *
+from lark_oapi.api.im.v1 import *
 from type import *
 
 CARD_CONTEXT = ""
@@ -24,14 +28,10 @@ def create_card(client: lark.Client, card_content: str = CARD_CONTEXT) -> Option
     return resp.data.card_id
 
 
-def update_card_config(client: lark.Client, card_id: str, config: CardConfig) -> bool:
+def update_card_config(client: lark.Client, card_id: str, config: CardConfig, seq=1) -> bool:
     try:
         config_data = json.dumps({
             "streaming_mode": config.streaming_mode,
-            "enable_forward": config.enable_forward,
-            "update_multi": config.update_multi,
-            "width_mode": config.width_mode,
-            "enable_forward_interaction": config.enable_forward_interaction,
             "summary": {
                 "content": config.summary.content,
                 "i18n_content": config.summary.i18n_content
@@ -45,8 +45,8 @@ def update_card_config(client: lark.Client, card_id: str, config: CardConfig) ->
         .card_id(card_id) \
         .request_body(SettingsCardRequestBody.builder()
                       .settings(config_data)
-                      .uuid("191857678434")
-                      .sequence(1)
+                      .uuid(uuid.uuid4().hex)
+                      .sequence(seq)
                       .build()) \
         .build()
 
@@ -59,14 +59,14 @@ def update_card_config(client: lark.Client, card_id: str, config: CardConfig) ->
     return True
 
 
-def update_card_content(client: lark.Client, card_id: str, content: str) -> bool:
+def update_card_content(client: lark.Client, card_id: str, element_id: str, content: str, seq=1) -> bool:
     req = ContentCardElementRequest.builder() \
         .card_id(card_id) \
-        .element_id("content") \
+        .element_id(element_id) \
         .request_body(ContentCardElementRequestBody.builder()
-                      .uuid("191857678434")
+                      .uuid(uuid.uuid4().hex)
                       .content(content)
-                      .sequence(1)
+                      .sequence(seq)
                       .build()) \
         .build()
 
@@ -74,7 +74,6 @@ def update_card_content(client: lark.Client, card_id: str, content: str) -> bool
     if not resp.success():
         print(f"Error updating card content: {resp.code}, {resp.msg}")
         return False
-
     lark.logger.info(
-        f"Card content updated success")
+        f"Card content updated success {resp.msg}")
     return True

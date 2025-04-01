@@ -48,9 +48,12 @@ class BedrockProvider:
         self.model = MODEL_MAP.get(model, DEFAULT_MODEL)
 
     def generate(
-        self, prompt: str, system_prompt: Optional[str] = None, **kwargs
+        self, prompt: str, system_prompt: Optional[str] = None, past_result=None, **kwargs
     ) -> Optional[str]:
-        messages = [{"role": "user", "content": [{"text": prompt}]}]
+        messages = []
+        if past_result is not None:
+            messages = past_result
+        messages.append({"role": "user", "content": [{"text": prompt}]})
         if system_prompt:
             response = self.client.converse(
                 modelId=self.model,
@@ -138,11 +141,11 @@ def split_think_content(text: str) -> Tuple[str, str]:
     return think_content, reply_content
 
 
-async def request(data: str | None, model: str = DEFAULT_MODEL) -> Tuple[str, str]:
+async def request(data: str | None, past_result=None, model: str = DEFAULT_MODEL) -> Tuple[str, str]:
     if data is None:
         return "please input text!"
     p = BedrockProvider(model)
-    result = p.generate(data)
+    result = p.generate(data, past_result=past_result)
     think_content, reply_content = split_think_content(result)
     return think_content, reply_content
 
