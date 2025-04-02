@@ -18,20 +18,23 @@ from contextlib import contextmanager
 
 
 class DB:
-    def __init__(self):
+    def __init__(self, table: str = "rag"):
         self.tidb_host = os.getenv("TIDB_HOST", "127.0.0.1")
         self.tidb_port = int(os.getenv("TIDB_PORT", "4000"))
         self.tidb_user = os.getenv("TIDB_USER", "root")
         self.tidb_password = os.getenv("TIDB_PASSWORD", "")
         self.tidb_db_name = os.getenv("TIDB_DB_NAME", "test")
         self.ca_path = os.getenv("CA_PATH", "")
+        self.table = table
         with self.open_db() as (conn, cur):
-            cur.execute(f'''CREATE TABLE IF NOT EXISTS {self.tidb_db_name}(
+            cur.execute(f"DROP TABLE IF EXISTS {self.table}")
+            cur.execute(f'''CREATE TABLE IF NOT EXISTS {self.table}(
                 message_id varchar (255),
                 thread_id varchar (255),
-                content varchar(255),
-                create_time timestamp NOT NULL,
-                update_time timestamp,
+                think text,
+                answer text,
+                create_time timestamp NOT NULL default current_timestamp,
+                update_time timestamp default current_timestamp,
                 PRIMARY KEY (message_id, thread_id));'''
                         )
 
@@ -57,18 +60,40 @@ class DB:
             with conn.cursor(dictionary=True) as cur:
                 yield conn, cur
 
-    def insert(self, message_id, thread_id, content, create_time):
-        with self.open_db() as (conn, cur):
-            cur.execute(
-                f"INSERT INTO {self.tidb_db_name} VALUES(%s, %s, %s, %s)", (message_id, thread_id, content, create_time))
+    def insert(self, message_id, thread_id, content: dict) -> Exception | None:
+        '''
+        只存卡片消息
+        '''
+        try:
+            with self.open_db() as (conn, cur):
+                cur.execute(
+                    f"INSERT INTO {self.table} (message_id, thread_id, think, answer, create_time) VALUES(%s, %s, %s, %s, DEFAULT)", (message_id, thread_id, content["think"], content["answer"]))
+        except Exception as e:
+            return e
 
-    def update(self, message_id, thread_id, content, update_time):
-        with self.open_db() as (conn, cur):
-            cur.execute(
-                f"UPDATE {self.tidb_db_name} SET content = %s, update_time = %s WHERE message_id = %s and thread_id = %s", (content, update_time, message_id, thread_id))
+    def update(self, message_id, thread_id, content: dict) -> Exception | None:
+        try:
+            with self.open_db() as (conn, cur):
+                cur.execute(
+                    f"UPDATE {self.table} SET think = %s, answer = %s, update_time = DEFAULT WHERE message_id = %s and thread_id = %s", (content["think"], content["answer"], message_id, thread_id))
+        except Exception as e:
+            return e
 
-    def query(self, message_id, thread_id):
+    def query(self, message_id, thread_id) -> dict:
+        '''
+        查询对应消息卡片
+        '''
         with self.open_db() as (conn, cur):
             cur.execute(
-                f"SELECT * from {self.tidb_db_name} WHERE message_id = %s and thread_id = %s", (message_id, thread_id))
+                f"SELECT * from {self.table} WHERE message_id = %s and thread_id = %s", (message_id, thread_id))
             return cur.fetchone()
+
+
+if __name__ == "__main__":
+    db = DB()
+    content = {"think": "think", "answer": "answer"}
+    err = db.insert("message_id", "thread_id", content)
+    if err is not None:
+        print(err)
+    result = db.query("message_id", "thread_id")
+    print(result["think"], result["answer"])

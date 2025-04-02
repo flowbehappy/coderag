@@ -32,7 +32,7 @@
                 "header": {
                     "title": {
                         "tag": "plain_text",
-                        "content": "Thinking..."
+                        "content": "Thinking"
                     },
                     "icon": {
                         "tag": "standard_icon",

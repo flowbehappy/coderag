@@ -1,6 +1,5 @@
 import json
 import uuid
-from string import Template
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import *
@@ -33,8 +32,7 @@ def update_card_config(client: lark.Client, card_id: str, config: CardConfig, se
         config_data = json.dumps({
             "streaming_mode": config.streaming_mode,
             "summary": {
-                "content": config.summary.content,
-                "i18n_content": config.summary.i18n_content
+                "content": config.summary.content
             }
         })
     except Exception as e:
@@ -54,8 +52,6 @@ def update_card_config(client: lark.Client, card_id: str, config: CardConfig, se
     if not resp.success():
         print(f"Error updating card config: {resp.code}, {resp.msg}")
         return False
-
-    lark.logger.info(lark.JSON.marshal(resp, indent=4))
     return True
 
 

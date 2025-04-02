@@ -50,7 +50,7 @@ class BedrockProvider:
 
     def generate(
         self, prompt: str, system_prompt: Optional[str] = None, past_result=None, **kwargs
-    ) -> Optional[str]:
+    ) -> dict:
         messages = []
         if past_result is not None:
             messages = past_result
@@ -108,17 +108,14 @@ class BedrockProvider:
                 # }
                 # },
             )
-        answer = None
-        reasoning = None
+        answer = ""
+        reasoning = ""
         for message in response["output"]["message"]["content"]:
             if "text" in message:
                 answer = message["text"]
             elif "reasoningContent" in message:
                 reasoning = message["reasoningContent"]["reasoningText"]["text"]
-        if reasoning:
-            return f"<think>{reasoning}</think>\n{answer}"
-        else:
-            return answer
+        return {"think": reasoning, "answer": answer}
 
     def generate_stream(
         self, prompt: str, system_prompt: Optional[str] = None, **kwargs
@@ -155,34 +152,11 @@ class BedrockProvider:
             yield f"Error: {str(e)}"
 
 
-def split_think_content(text: str) -> Tuple[str, str]:
-    think_pattern = re.compile(
-        r'<think>\s*(.*?)\s*</think>',
-        re.DOTALL | re.IGNORECASE
-    )
-
-    think_matches = think_pattern.findall(text)
-
-    think_content = think_matches[-1].strip() if think_matches else ""
-
-    reply_content = think_pattern.sub('', text).strip()
-
-    if not think_matches:
-        reply_content = text.strip()
-
-    think_content = think_content if think_content else "[无思考内容]"
-    reply_content = reply_content if reply_content else "[无回复内容]"
-
-    return think_content, reply_content
-
-
-async def request(data: str | None, past_result=None, model: str = DEFAULT_MODEL) -> Tuple[str, str]:
+async def request(data: str | None, past_result=None, model: str = DEFAULT_MODEL) -> dict:
     if data is None:
         return "please input text!"
     p = BedrockProvider(model)
-    result = p.generate(data, past_result=past_result)
-    think_content, reply_content = split_think_content(result)
-    return think_content, reply_content
+    return p.generate(data, past_result=past_result)
 
 
 if __name__ == "__main__":

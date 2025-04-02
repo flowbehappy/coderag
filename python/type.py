@@ -3,8 +3,17 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class Text:
+class ReasoningText:
+    tag: str = "reasoning_text"
     text: str = ""
+
+
+@dataclass
+class MessagePostReasoningContent:
+    tag: str = "reasoning_content"
+    text: str = ""
+    reasoningText: ReasoningText = field(default_factory=ReasoningText)
+    style: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -62,6 +71,7 @@ class MessagePostCode:
 
 
 MessagePostElement = Union[
+    MessagePostReasoningContent,
     MessagePostText, MessagePostLink, MessagePostAt,
     MessagePostImage, MessagePostMedia, MessagePostEmotion,
     MessagePostHr, MessagePostCode
